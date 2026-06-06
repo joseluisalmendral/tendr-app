@@ -67,7 +67,7 @@ describe("createClientInWorkspace", () => {
 
     expect(result.status).toBe("error");
     if (result.status !== "error") return;
-    expect(result.fieldErrors?.email).toBe("Ingresá un email válido.");
+    expect(result.fieldErrors?.email).toBe("Introduce un email válido.");
 
     // No DB row was created for this name (validation ran BEFORE any DB call).
     const { data } = await a.client

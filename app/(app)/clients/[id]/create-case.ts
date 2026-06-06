@@ -62,7 +62,7 @@ const createCaseSchema = z.object({
     .union([
       z.literal(""),
       z.coerce
-        .number({ message: "Ingresá un monto válido." })
+        .number({ message: "Introduce un monto válido." })
         .int("El monto debe ser un número entero de centavos.")
         .min(0, "El monto no puede ser negativo."),
     ])

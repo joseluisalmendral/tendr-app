@@ -226,9 +226,9 @@ export function ClientsTable({
             <EmptyMedia variant="icon">
               <UsersIcon />
             </EmptyMedia>
-            <EmptyTitle>Aún no tenés clientes</EmptyTitle>
+            <EmptyTitle>Aún no tienes clientes</EmptyTitle>
             <EmptyDescription>
-              Creá el primero para empezar a organizar tus casos.
+              Crea el primero para empezar a organizar tus casos.
             </EmptyDescription>
           </EmptyHeader>
           <NewClientDialog addOptimisticClient={addOptimisticClient} />

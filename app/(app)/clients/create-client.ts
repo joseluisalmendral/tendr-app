@@ -47,7 +47,7 @@ export type CreateClientState =
 const createClientSchema = z.object({
   name: z.string().trim().min(1, "El nombre es obligatorio."),
   email: z
-    .union([z.literal(""), z.string().trim().email("Ingresá un email válido.")])
+    .union([z.literal(""), z.string().trim().email("Introduce un email válido.")])
     .optional()
     .transform((value) => (value ? value : undefined)),
   company: z
