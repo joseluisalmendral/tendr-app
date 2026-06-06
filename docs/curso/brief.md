@@ -436,7 +436,7 @@ Duración objetivo: 2–4 minutos.
    | `ai_usage_ledger` | Tracking de coste por workspace y feature | `workspace_id`, `feature`, `provider`, `model_id`, `tokens_in`, `tokens_out`, `cost_cents`, `created_at` |
 
 4. **RLS policies** por `workspace_id` para todas las tablas operativas. `ai_model_manifest` es lectura pública (mismo manifest para todos los workspaces). **Aviso crítico de seguridad:** `encrypted_key` no se devuelve nunca al cliente; solo se usa server-side dentro de Server Actions o Inngest functions.
-5. **Supabase Branches:** crear **persistent branch `dev`** para desarrollo separada de `main` (producción). Cada PR generará una **preview branch efímera** automáticamente.
+5. **Entornos:** un único proyecto Supabase (`tendr-app-dev`) más Supabase local para tests. Supabase Branching (persistent branch `dev` + preview branches por PR) requiere plan Pro y queda fuera del curso; en un caso real, segundo proyecto Free o plan Pro con Branching.
 6. **Tests de RLS con dos herramientas complementarias:**
    - **RLS Tester preview del Supabase Dashboard** (lanzado abril 2026): UI que ejecuta SQL como roles distintos (logged in / logged out / specific user) y muestra qué policies se evalúan. Ideal para iterar policies rápido.
    - **Vitest contra Supabase local** (vía CLI): crear 2 usuarios reales, cada uno crea data, intentar acceder cruzado, verificar que falla. Esto va en CI.
@@ -452,7 +452,7 @@ Duración objetivo: 2–4 minutos.
 
 **Herramientas activas durante esta fase:**
 
-- **Supabase MCP** (oficial, 32 tools): tool groups `database`, `branching`, `account`, `docs`.
+- **Supabase MCP** (oficial, 32 tools): tool groups `database`, `account`, `docs`.
 - **Supabase Agent Skills** (oficial, mayo 2026): playbooks de Auth + RLS + Storage inyectados en el contexto del agente.
 - **Drizzle Studio** (`pnpm drizzle-kit studio`) para inspeccionar el schema.
 - Context7 MCP activo para docs de `@supabase/ssr` y Drizzle.
@@ -461,7 +461,7 @@ Duración objetivo: 2–4 minutos.
 
 1. **Drizzle ORM vs cliente Supabase puro:** Drizzle para queries complejas con tipos; cliente Supabase para queries simples con RLS. Aquí los dos conviven.
 2. **`audit_log` desde el inicio vs después:** desde el inicio porque añadirlo después obliga a backfill.
-3. **Branches Supabase vs un solo proyecto:** branches por aislamiento real entre dev y prod sin coste extra.
+3. **Branches Supabase vs un solo proyecto:** un solo proyecto. Branching requiere plan Pro y factura cómputo por branch; en Free el aislamiento lo dan Supabase local para tests y, en un caso real, un segundo proyecto.
 
 **Mentalidad senior a transmitir:**
 - Los datos definen el producto. RLS sin tests no es RLS funcional.
@@ -479,11 +479,11 @@ Duración objetivo: 2–4 minutos.
 - Usar `service_role` en código que llega al cliente.
 - Crear vistas sin `security_invoker = true`.
 - Confiar en que UPDATE falla con error si no hay permiso.
-- No usar Supabase Branches y trabajar contra producción.
+- Correr operaciones destructivas (db reset, tests) contra el proyecto cloud en lugar de Supabase local.
 
 **Referencias web verificadas:**
 - Supabase RLS: [https://supabase.com/docs/guides/database/postgres/row-level-security](https://supabase.com/docs/guides/database/postgres/row-level-security). Verificada 2026-05-19.
-- Supabase Branches: [https://supabase.com/docs/guides/platform/branching](https://supabase.com/docs/guides/platform/branching). Verificada 2026-05-19.
+- Supabase Branches: [https://supabase.com/docs/guides/platform/branching](https://supabase.com/docs/guides/platform/branching). Verificada 2026-05-19. **Re-verificada 2026-06-06: requiere plan Pro; descartada para el curso (plan Free).**
 - Drizzle docs: [https://orm.drizzle.team/](https://orm.drizzle.team/). Verificada 2026-05-19.
 - Supabase Agent Skills: [https://supabase.com/docs/guides/getting-started/ai-prompts](https://supabase.com/docs/guides/getting-started/ai-prompts). Verificada 2026-05-19.
 
@@ -907,7 +907,7 @@ Esta fase tiene **dos piezas grandes que se montan juntas**:
 **Puntos clave técnicos:**
 
 1. **Por qué una fase dedicada al QA.** Cada fase anterior validó su parte aislada. Los SaaS reales fallan en los **flujos cruzados**: signup que rompe al crear el primer cliente, plantillas que fallan tras upgrade a Pro, jobs que no aparecen en realtime tras refresh.
-2. **Donde corre la suite E2E:** contra la **Supabase preview branch del PR**, no contra producción. Cada PR genera automáticamente una preview branch con su BD aislada. Los tests E2E apuntan a esa preview branch + el preview deploy de Vercel correspondiente. Aislamiento perfecto: la suite no contamina datos reales y se puede correr en paralelo entre PRs.
+2. **Donde corre la suite E2E:** en local contra Supabase local (`supabase start`); en CI contra el preview deploy de Vercel, que apunta al proyecto Supabase único del curso. Los datos de test son sintéticos y cada run borra los workspaces que creó. Con plan Pro, las preview branches por PR darían una BD aislada por PR y runs en paralelo; en Free, el aislamiento lo aporta la limpieza disciplinada.
 3. **Configurar `e2e/` con Playwright + axe-core:**
    ```
    pnpm add -D @playwright/test @axe-core/playwright
@@ -939,12 +939,12 @@ Esta fase tiene **dos piezas grandes que se montan juntas**:
 8. **Reuso de la Skill `landing-auditor` de L16** para auditar también la app (al menos las páginas públicas como `/`, `/login`, `/upgrade`).
 9. **Si hay findings:** arreglar antes de pasar a C10. La gate es estricta. Tras fix, re-run suite completa.
 
-**Activar Supabase MCP** para verificar que la preview branch del PR está creada y migrada.
+**Activar Supabase MCP** para verificar que el proyecto está migrado al schema actual.
 
 **Trade-offs clave:**
 
 1. **5–7 flujos críticos vs testear todo:** testear lo que mata el producto si falla. Testear todo produce suite lenta que nadie corre.
-2. **E2E contra preview branch vs contra producción:** preview branch siempre. Producción no se contamina.
+2. **E2E contra el proyecto cloud vs Supabase local:** local siempre que se pueda; contra el proyecto cloud solo con datos sintéticos y limpieza tras cada run.
 3. **A11y automatizado vs revisión manual:** los dos. Automatizado captura el 80%; el 20% restante (navegación por teclado real, lector de pantalla) es humano.
 
 **Mentalidad senior a transmitir:**
@@ -996,7 +996,7 @@ Esta fase tiene **dos piezas grandes que se montan juntas**:
        - run: pnpm build
      preview:
        - Vercel preview deploy automático (integration)
-       - Supabase preview branch automática por PR (integration)
+       - BD del preview: proyecto Supabase único del curso (Branching requiere plan Pro)
      ai-review:
        - uses: anthropics/claude-code-action@v1
    ```

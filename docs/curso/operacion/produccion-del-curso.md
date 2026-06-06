@@ -243,13 +243,13 @@ coverage/
 | `clase-0` | Repo recién creado: README + LICENSE + CLAUDE.md + AGENTS.md + .gitignore + .env.example. |
 | `clase-1` | `docs/jtbd.md` y `docs/spec.md` versionados. `docs/tasks.md` priorizado. AGENTS.md actualiza con `@jtbd.md @spec.md`. |
 | `clase-2` | ADRs 001-003 (arquitectura, ToS Vercel, capa IA) en `docs/decisions/`. `docs/architecture.md` con diagrama. Disclaimer ToS en README. |
-| `clase-3` | Schema completo en Drizzle. RLS policies vigentes. Vitest de aislamiento en verde. Supabase branches `dev` + preview configuradas. |
+| `clase-3` | Schema completo en Drizzle. RLS policies vigentes. Vitest de aislamiento en verde. Proyecto único `tendr-app-dev` migrado (Branching descartado: requiere plan Pro). |
 | `clase-4` | Auth funcional con magic link + patrón anónimo → autenticado. `proxy.ts` protegiendo rutas. Tests de promoción. |
 | `clase-5` | Workspace core: clientes, casos, Kanban con DnD + Realtime + `useOptimistic`. **PRs ejemplo del bloque code review explicado**. |
 | `clase-6` | Upload de documentos + Inngest function `extractDocument` + capability routing + Langfuse trazando. |
 | `clase-7` | Editor plantillas + `/settings/ai` página única + envelope encryption + manifest seed + cost budget MVP + inserts en `audit_log`. ADR-007 firmado. |
 | `clase-8` | Stripe sandbox + Checkout + webhook signed + idempotencia + helper `requirePlan` en Server Actions. |
-| `clase-9` | Suite E2E Playwright + axe-core verde sobre preview branch. Checklist QA pasado. |
+| `clase-9` | Suite E2E Playwright + axe-core verde (Supabase local; en CI, preview deploy sobre el proyecto único). Checklist QA pasado. |
 | `clase-10` | Producción + Sentry + Langfuse activos + smoke check + claude-code-action + feature flag rollout iniciado. ADR-007 reabierto con datos reales. |
 
 ### 4.3 CHANGELOG-CURSO.md

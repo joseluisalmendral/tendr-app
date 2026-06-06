@@ -555,14 +555,14 @@ Vuelve a Excel y borra la cuenta.
 
 **Cómo se ve en práctica.**
 
-1. Usar Supabase MCP (tool group `database` y `branching`) para crear tablas y configurar branches.
-2. **Supabase Branches:** crear una **persistent branch** `dev` para desarrollo, separada de `main` (producción). Cada PR generará una **preview branch** efímera automáticamente.
+1. Usar Supabase MCP (tool group `database`) para crear tablas y policies.
+2. **Entornos:** un único proyecto Supabase (`tendr-app-dev`) más Supabase local para tests. Branching (persistent branch `dev` + preview branches por PR) requiere plan Pro y queda fuera del curso.
 3. Drizzle schema en TypeScript paralelo al SQL. **Supabase Agent Skills** (oficial, mayo 2026) inyecta playbooks de Auth + RLS + Storage en el contexto del agente.
 4. RLS policies SQL: `select`, `insert`, `update`, `delete` por cada tabla con `workspace_id`.
 5. **Tests de RLS con dos herramientas complementarias:**
    - **RLS Tester preview** del Supabase Dashboard (lanzado abril 2026): UI que ejecuta SQL como roles distintos (logged in / logged out / specific user) y muestra qué policies se evalúan. Ideal para iterar policies rápido.
    - **Vitest contra Supabase local** (vía `supabase` CLI): crear 2 usuarios reales, cada uno crea data, intentar acceder cruzado, verificar que falla. Esto va en CI.
-6. CI corre los tests en cada PR contra la preview branch correspondiente.
+6. CI corre los tests en cada PR contra Supabase local levantado en el runner.
 
 **Security gotchas críticos** que el alumno debe conocer y que **Supabase Agent Skills** documenta:
 
@@ -582,7 +582,7 @@ Vuelve a Excel y borra la cuenta.
 - Usar `service_role` en código que llega al cliente.
 - **Crear vistas sin `security_invoker = true`** (gotcha clásico).
 - **Confiar en que UPDATE falla con error si no hay permiso** (no, silentemente devuelve 0 rows).
-- No usar Supabase Branches y trabajar contra producción.
+- Correr operaciones destructivas (db reset, tests) contra el proyecto cloud en lugar de Supabase local.
 
 ---
 
@@ -1070,11 +1070,11 @@ Produce: editor markdown con preview, Server Action `adaptTemplate` con streamin
 
 **Conexión con fases vecinas.** Es la **gate** antes de deploy (fase 10). Si esta fase falla, no se merge a main. Consume todas las features construidas en fases 5 a 8.
 
-**Donde corre la suite E2E:** contra la **Supabase preview branch del PR**, no contra producción. Cada PR genera automáticamente una preview branch con su BD aislada. Los tests E2E apuntan a esa preview branch + el preview deploy de Vercel correspondiente. Esto da aislamiento perfecto: la suite no contamina datos reales y se puede correr en paralelo entre PRs.
+**Donde corre la suite E2E:** en local contra Supabase local (`supabase start`); en CI contra el preview deploy de Vercel, que apunta al proyecto Supabase único del curso. Los datos de test son sintéticos y cada run borra los workspaces que creó. Con plan Pro, las preview branches por PR darían BD aislada por PR y runs en paralelo; en Free, el aislamiento lo aporta la limpieza disciplinada.
 
 **Cómo se ve en práctica.**
 
-1. **Verificar que Supabase preview branch del PR está creada y migrada** (automático si el GitHub integration de Supabase está configurado). El agente con Supabase MCP puede comprobarlo: "lista las branches del proyecto, verifica que existe `pr-{n}` y está migrada al último schema".
+1. **Verificar que el proyecto Supabase está migrado al último schema.** El agente con Supabase MCP puede comprobarlo: "verifica las migraciones aplicadas en el proyecto y confirma que no hay pendientes".
 2. **Configurar `e2e/` con Playwright + axe-core:**
    ```
    pnpm add -D @playwright/test @axe-core/playwright
@@ -1086,7 +1086,7 @@ Produce: editor markdown con preview, Server Action `adaptTemplate` con streamin
    - Subir documento → ver job en progreso → ver extracción completa.
    - Crear plantilla → adaptar con IA → preview correcto.
    - User Free hit feature Pro → redirect a Checkout → completar pago test → desbloqueado.
-4. **Escribir cada flujo en `e2e/*.spec.ts`** apuntando al `PREVIEW_URL` del PR (Vercel preview deploy + Supabase preview branch). El agente puede generar los specs partiendo del flujo en lenguaje natural.
+4. **Escribir cada flujo en `e2e/*.spec.ts`** apuntando al `PREVIEW_URL` del PR (Vercel preview deploy; BD: proyecto único del curso). El agente puede generar los specs partiendo del flujo en lenguaje natural.
 5. **Configurar viewports** en `playwright.config.ts`:
    ```typescript
    projects: [
@@ -1160,7 +1160,7 @@ Produce: editor markdown con preview, Server Action `adaptTemplate` con streamin
        - run: pnpm build
      preview:
        - Vercel preview deploy automático (integration)
-       - Supabase preview branch automática por PR (integration)
+       - BD del preview: proyecto Supabase único del curso (Branching requiere plan Pro)
      ai-review:
        - uses: anthropics/claude-code-action@v1  # revisa cambios y comenta findings
    ```
@@ -1332,7 +1332,7 @@ El alumno revisa **dónde le dejaría Tendr** en cada métrica con el CI/CD actu
 - Stack moderno gratuito que escala a primeros usuarios sin pagar nada (excepto IA del usuario).
 - Patrones fullstack con Next.js, Supabase, Stripe, Inngest.
 - RLS sólido desde el inicio, no como parche, **con conocimiento de los gotchas críticos** (views bypass RLS, UPDATE sin SELECT silent, Storage upsert, delete user no revoca JWT).
-- **Supabase Branches** como patrón de aislamiento: preview branches por PR, persistent branches para staging.
+- **Aislamiento de entornos con presupuesto real**: en plan Free, Supabase local + proyecto único (o segundo proyecto); con plan Pro, Supabase Branches (preview branches por PR, persistent branches para staging).
 - **RLS Tester preview del Supabase Dashboard** como herramienta de iteración rápida de policies.
 - Auth como decisión de producto (anónimo a autenticado).
 - Jobs persistidos + Realtime para trabajo IA largo.
