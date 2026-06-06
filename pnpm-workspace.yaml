@@ -1,0 +1,28 @@
+# pnpm 11+ security settings.
+# Note: since pnpm 11, .npmrc is auth/registry only — behavior settings live here (camelCase).
+# Several of these are pnpm 11 defaults; kept explicit to document intent and survive downgrades.
+
+# Fail install immediately when a dependency declares lifecycle scripts,
+# forcing an explicit allow/block decision per package.
+strictDepBuilds: true
+
+# Release cooldown: block package versions published less than 24h ago (supply-chain protection).
+minimumReleaseAge: 1440
+
+# Block subdependencies resolved from exotic sources (git, http tarballs) not declared directly.
+blockExoticSubdeps: true
+
+# Fail `pnpm audit` on high-severity vulnerabilities or worse.
+auditLevel: high
+
+# Headless install when pnpm-lock.yaml already satisfies package.json (no resolution step).
+preferFrozenLockfile: true
+
+# Lifecycle script decisions (strictDepBuilds forces an explicit allow/block per package).
+# esbuild: allowed — its postinstall validates the platform binary.
+# msw/sharp/unrs-resolver: blocked — prebuilt binaries, scripts unnecessary.
+allowBuilds:
+  esbuild: true
+  msw: false
+  sharp: false
+  unrs-resolver: false
