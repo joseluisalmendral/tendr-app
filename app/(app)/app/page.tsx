@@ -11,7 +11,9 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { resolveCurrentWorkspace } from "@/lib/auth/resolve-current-workspace";
 import { getCurrentWorkspace } from "@/lib/auth/get-current-workspace";
+import { createClient } from "@/lib/supabase/server";
 
 import { DashboardCards } from "./dashboard-cards";
 import { getRecentActivity } from "./dashboard-activity";
@@ -31,7 +33,12 @@ export default async function DashboardPage() {
 
   if (current && current.workspaceId === null) {
     await ensureAnonymousWorkspace();
-    current = await getCurrentWorkspace();
+    // getCurrentWorkspace is React.cache()'d for the request, so re-reading it
+    // here would return the stale pre-provision value (workspaceId === null)
+    // and the dashboard would render blank. Re-read through the UNCACHED pure
+    // seam with a fresh server client so the just-provisioned workspace is
+    // visible within this single request.
+    current = await resolveCurrentWorkspace(await createClient());
   }
 
   // The layout guard makes this unreachable; handled defensively.
