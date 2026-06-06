@@ -45,7 +45,7 @@ export function KanbanCard({ kanbanCase }: { kanbanCase: KanbanCase }) {
       }}
       {...attributes}
       {...listeners}
-      aria-label={`Caso ${kanbanCase.title}, estado ${statusLabel}. Usá las teclas de flecha para moverlo entre estados.`}
+      aria-label={`Caso ${kanbanCase.title}, estado ${statusLabel}. Usa las teclas de flecha para moverlo entre estados.`}
       data-dragging={isDragging ? "" : undefined}
       className={[
         "group cursor-grab touch-none rounded-lg border bg-card p-3 text-card-foreground",

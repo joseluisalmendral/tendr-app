@@ -51,7 +51,7 @@ export type MoveCaseInput = {
 
 const GENERIC_ERROR =
   "No pudimos mover el caso. Volvé a intentarlo en un momento.";
-const FORBIDDEN_ERROR = "No podés mover un caso que no pertenece a tu espacio.";
+const FORBIDDEN_ERROR = "No puedes mover un caso que no pertenece a tu espacio.";
 
 /**
  * Validates the raw input with Zod BEFORE any DB call, then invokes the atomic

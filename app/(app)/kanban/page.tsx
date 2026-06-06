@@ -53,7 +53,7 @@ export default async function KanbanPage() {
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Kanban</h1>
         <p className="text-sm text-muted-foreground">
-          Arrastrá los casos entre estados. Los cambios se sincronizan en tiempo
+          Arrastra los casos entre estados. Los cambios se sincronizan en tiempo
           real entre tus pestañas.
         </p>
       </div>
