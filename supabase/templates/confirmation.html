@@ -1,0 +1,19 @@
+<!--
+  Local signup-confirmation template (F4 promotion flow).
+
+  Sent to a BRAND-NEW user created via signInWithOtp({ shouldCreateUser: true })
+  when enable_confirmations = true. The default template uses
+  {{ .ConfirmationURL }} (PKCE `code`); our /auth/callback verifies with
+  verifyOtp({ token_hash, type }), so we emit {{ .TokenHash }} with type=email.
+
+  EmailOtpType "email" covers magic-link / OTP sign-in confirmation. LOCAL
+  config only; the REMOTE dashboard template is the user's responsibility.
+-->
+<h2>Confirmá tu correo en Tendr</h2>
+<p>Hacé clic para confirmar tu dirección y acceder a tu cuenta:</p>
+<p>
+  <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email"
+    >Confirmar y acceder</a
+  >
+</p>
+<p>Si no creaste esta cuenta, podés ignorar este correo.</p>

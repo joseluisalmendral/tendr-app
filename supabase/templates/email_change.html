@@ -1,0 +1,20 @@
+<!--
+  Local email-change template (F4 promotion flow).
+
+  Sent when an anonymous user attaches an email via updateUser({ email }).
+  Confirming this link is what promotes the SAME auth.users row from anonymous
+  to permanent, preserving auth.uid().
+
+  Emits {{ .TokenHash }} and type=email_change so /auth/callback can verify with
+  verifyOtp({ token_hash, type: "email_change" }). LOCAL config only; the REMOTE
+  dashboard template is the user's responsibility (out of code scope).
+-->
+<h2>Confirmá tu correo en Tendr</h2>
+<p>Confirmá esta dirección para activar tu cuenta permanente:</p>
+<p>
+  <a
+    href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email_change"
+    >Confirmar correo</a
+  >
+</p>
+<p>Si no solicitaste este cambio, podés ignorar este correo.</p>
