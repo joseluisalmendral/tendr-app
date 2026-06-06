@@ -8,15 +8,18 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import {
   DndContext,
   type DragEndEvent,
+  KeyboardCode,
+  type KeyboardCoordinateGetter,
   KeyboardSensor,
   PointerSensor,
   closestCorners,
+  getFirstCollision,
+  useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { KanbanIcon } from "@phosphor-icons/react";
@@ -139,9 +142,12 @@ export function KanbanBoard({
       // A small activation distance so a click on a card isn't read as a drag.
       activationConstraint: { distance: 6 },
     }),
-    // Keyboard accessibility: cards are movable without a pointer.
+    // Keyboard accessibility: cards are movable without a pointer. The custom
+    // coordinate getter (below) makes EMPTY columns reachable — the stock
+    // sortable getter only targets sortable items, so empty columns (which have
+    // no items) were unreachable.
     useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
+      coordinateGetter: multipleContainersCoordinateGetter,
     }),
   );
 
@@ -221,9 +227,12 @@ export function KanbanBoard({
 }
 
 /**
- * A single status column. Its `SortableContext` items include a synthetic
- * column id so dropping into an EMPTY column still resolves to a status (the
- * column id IS the status string).
+ * A single status column. The column itself is registered as a `useDroppable`
+ * container keyed by its `status` string, so dropping (pointer OR keyboard)
+ * onto an EMPTY column resolves to a real, measurable droppable rect — the
+ * stock sortable-only target list never exposed empty columns. The
+ * `SortableContext` items are only the card ids (within-column ordering); the
+ * column droppable handles cross-column / empty-column targeting.
  */
 function KanbanColumn({
   status,
@@ -232,15 +241,19 @@ function KanbanColumn({
   status: CaseStatus;
   cases: KanbanCase[];
 }) {
-  const itemIds = useMemo(
-    () => [status, ...cases.map((c) => c.id)],
-    [status, cases],
-  );
+  const itemIds = useMemo(() => cases.map((c) => c.id), [cases]);
+
+  // Register the column as a droppable container (id === status). This gives
+  // empty columns a measured rect that both collision detection and the custom
+  // keyboard coordinate getter can target.
+  const { setNodeRef, isOver } = useDroppable({ id: status });
 
   return (
     <section
+      ref={setNodeRef}
       aria-label={`Columna ${STATUS_LABELS[status]}`}
-      className="flex min-h-48 flex-col gap-3 rounded-lg border bg-muted/30 p-3 transition-colors duration-150"
+      data-over={isOver ? "" : undefined}
+      className="flex min-h-48 flex-col gap-3 rounded-lg border bg-muted/30 p-3 transition-colors duration-150 data-[over]:border-foreground/30 data-[over]:bg-muted/60"
     >
       <header className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium">{STATUS_LABELS[status]}</h2>
@@ -293,3 +306,81 @@ function resolveTargetStatus(
   const overCase = cases.find((c) => c.id === overId);
   return overCase?.status ?? null;
 }
+
+const ARROW_KEYS: readonly string[] = [
+  KeyboardCode.Down,
+  KeyboardCode.Right,
+  KeyboardCode.Up,
+  KeyboardCode.Left,
+];
+
+/**
+ * Custom keyboard coordinate getter for the multiple-containers (column) layout
+ * — adapted from dnd-kit's official multipleContainersCoordinateGetter example.
+ *
+ * WHY: the stock `sortableKeyboardCoordinates` only proposes coordinates of
+ * sortable ITEMS. An empty column has no items, so it is impossible to move a
+ * card into it with the keyboard. Because each column is now a `useDroppable`
+ * container (id === status) with a measured rect, this getter can target the
+ * column rects directly:
+ *
+ *  - Left / Right → jump to the nearest COLUMN droppable in that horizontal
+ *    direction (reachable even when empty).
+ *  - Up / Down → move between droppables in that vertical direction; within a
+ *    column this lands on the next/previous card, falling back to the column
+ *    rect. This preserves intra-column ordering while keeping cross-column
+ *    movement possible.
+ *
+ * Space/Enter (grab/drop) and Escape (cancel) are handled by the KeyboardSensor
+ * itself and are unaffected.
+ */
+const multipleContainersCoordinateGetter: KeyboardCoordinateGetter = (
+  event,
+  { context: { active, droppableRects, droppableContainers, collisionRect } },
+) => {
+  if (!ARROW_KEYS.includes(event.code)) return;
+  event.preventDefault();
+  if (!active || !collisionRect) return;
+
+  const isHorizontal =
+    event.code === KeyboardCode.Right || event.code === KeyboardCode.Left;
+  const isForward =
+    event.code === KeyboardCode.Right || event.code === KeyboardCode.Down;
+
+  // Candidate droppables: skip the active item itself.
+  const candidates = droppableContainers.getEnabled().filter((container) => {
+    if (container.id === active.id) return false;
+    const rect = droppableRects.get(container.id);
+    if (!rect) return false;
+    if (isHorizontal) {
+      // Columns are laid out horizontally → compare on the X axis.
+      return isForward
+        ? rect.left > collisionRect.left
+        : rect.left < collisionRect.left;
+    }
+    // Within a column, cards are stacked vertically → compare on the Y axis.
+    return isForward
+      ? rect.top > collisionRect.top
+      : rect.top < collisionRect.top;
+  });
+
+  if (candidates.length === 0) return;
+
+  // Use closestCorners against the candidate rects to pick the nearest target,
+  // measured from the active item's current collision rect.
+  const collisions = closestCorners({
+    active,
+    collisionRect,
+    droppableRects,
+    droppableContainers: candidates,
+    pointerCoordinates: null,
+  });
+  const closestId = getFirstCollision(collisions, "id");
+  if (closestId == null) return;
+
+  const newRect = droppableRects.get(closestId);
+  if (!newRect) return;
+
+  // Aim for the top-left of the target droppable (matches the example).
+  return { x: newRect.left, y: newRect.top };
+};
