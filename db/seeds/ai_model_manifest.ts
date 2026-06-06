@@ -12,7 +12,9 @@ import { aiModelManifest } from "../schema/ai";
  * - OpenAI: GPT-5.5 $5/$30 per 1M (1.05M ctx); GPT-5.4 mini $0.75/$4.50 (400K ctx).
  * - Anthropic: Opus 4.8 $5/$25 (1M ctx); Haiku 4.5 $1/$5 (200K ctx).
  * - Google: Gemini 3.1 Pro $2/$12 <=200K prompt tier (2M ctx, $4/$18 above 200K);
- *   Gemini 3.5 Flash $1.50/$9 flat; Gemini 3.1 Flash-Lite $0.25/$1.50 flat.
+ *   Gemini 3.5 Flash $1.50/$9 flat; Gemini 3.1 Flash-Lite $0.25/$1.50 flat;
+ *   Gemini 2.5 Flash $0.30/$2.50; 2.5 Flash-Lite $0.10/$0.40
+ *   (2.0 family was shut down 2026-06-01).
  * - DeepSeek: V4 Pro $1.74/$3.48; V4 Flash $0.14/$0.28 (both 1M ctx, text-only).
  * - Moonshot: Kimi K2.6 $0.95/$4.00 cache-miss (256K ctx, multimodal).
  *
@@ -128,6 +130,34 @@ const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
     maxInputTokens: 1048576,
     costPer1kInput: "0.000250",
     costPer1kOutput: "0.001500",
+  },
+  {
+    provider: "google",
+    modelId: "gemini-2.5-flash",
+    displayName: "Gemini 2.5 Flash",
+    status: "active",
+    defaultForFeatures: [],
+    supportsMultimodal: true,
+    supportsPdf: true,
+    supportsImage: true,
+    supportsStreaming: true,
+    maxInputTokens: 1048576,
+    costPer1kInput: "0.000300",
+    costPer1kOutput: "0.002500",
+  },
+  {
+    provider: "google",
+    modelId: "gemini-2.5-flash-lite",
+    displayName: "Gemini 2.5 Flash-Lite",
+    status: "active",
+    defaultForFeatures: [],
+    supportsMultimodal: true,
+    supportsPdf: true,
+    supportsImage: true,
+    supportsStreaming: true,
+    maxInputTokens: 1048576,
+    costPer1kInput: "0.000100",
+    costPer1kOutput: "0.000400",
   },
   // ── DeepSeek ──────────────────────────────────────────────────────────────
   {
