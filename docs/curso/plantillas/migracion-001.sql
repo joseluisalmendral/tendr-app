@@ -1,0 +1,43 @@
+-- Migración inicial de referencia · 001_initial_schema.sql
+-- Generada por drizzle-kit desde db/schema/*.ts.
+-- Esta migración crea las 14 tablas de Tendr en una sola operación.
+-- En F3 el alumno NO escribe esta migración a mano; la genera con
+-- `pnpm drizzle-kit generate` y revisa que el output coincide con esta
+-- plantilla en estructura general.
+
+-- Ver el SQL completo en recursos/snippets/schema-tables.sql.
+-- Las policies RLS van en una migración separada (002_rls_policies.sql)
+-- o se aplican vía Supabase MCP con el contenido de recursos/snippets/rls-policies.sql.
+
+-- Estructura esperada del directorio db/migrations/ tras generate:
+--
+-- db/migrations/
+-- ├── 0000_initial_schema.sql       <- generada por drizzle-kit desde el schema
+-- ├── 0001_rls_policies.sql         <- creada manualmente con las policies
+-- └── meta/
+--     └── _journal.json              <- gestionado por drizzle-kit
+--
+-- Comando para generar:
+--   pnpm drizzle-kit generate
+--
+-- Comando para aplicar:
+--   pnpm drizzle-kit migrate
+--
+-- Si la migración inicial sale con algún detalle sospechoso (check
+-- constraints invertidos, foreign keys sin cascade), corregir el schema en
+-- db/schema/*.ts y regenerar (NO editar el SQL generado a mano).
+
+-- ============================================================================
+-- Columna clients.notes_summary (incluida en el schema inicial)
+-- ============================================================================
+-- La columna notes_summary de clients la rellena la Server Action
+-- summarize(clientId) en F7 y la lee adaptTemplate en F7. Es nullable: arranca
+-- vacía hasta el primer resumen. Forma parte del schema de db/schema/clients.ts,
+-- así que drizzle-kit la genera dentro de 0000_initial_schema.sql. La sentencia
+-- equivalente que aparecerá en el SQL generado:
+--
+--   alter table clients add column notes_summary text;
+--
+-- (o inline en el create table clients de la migración inicial). Si en algún
+-- momento se añadiera después del schema inicial, iría en su propia migración
+-- como columna nullable para no romper filas existentes.

@@ -1,0 +1,106 @@
+# .github/workflows/ci.yml · F10
+# CI completo de Tendr SaaS · valida + e2e + AI review por PR.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint + typecheck + tests + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 'lts/*'
+
+      - run: corepack enable
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify supply chain
+        run: pnpm audit signatures
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit + integration tests
+        run: pnpm test
+        env:
+          # Tests usan Supabase local (supabase start en CI), o branch de
+          # preview si está configurada.
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
+      - name: Schema drift check
+        run: pnpm drizzle-kit check
+
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          # Build no necesita keys server-only; las cargará Vercel en runtime.
+
+  e2e:
+    name: Playwright E2E
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 'lts/*'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: npx playwright install chromium webkit firefox --with-deps
+      - name: Run Playwright tests
+        run: pnpm exec playwright test
+        env:
+          PREVIEW_URL: ${{ secrets.PREVIEW_URL_PR }}  # Vercel preview deploy
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 7
+
+  ai-review:
+    name: AI review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # AI review necesita historia para comparar diff
+      - name: Claude Code review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY_CI }}
+          # El foco de la review va dentro del prompt (texto libre).
+          # Verificar inputs vigentes con doc oficial (Context7).
+          prompt: |
+            Revisa el diff de este PR como reviewer senior. Prioriza:
+            seguridad (RLS, webhooks signed, secret handling),
+            correctness (tests del happy path + error),
+            performance (waterfalls, re-renders, bundle),
+            accessibility (axe-core violations),
+            BYO key handling (jamás en logs ni traces).
+            Deja como máximo unos 10 comentarios, los de mayor impacto.

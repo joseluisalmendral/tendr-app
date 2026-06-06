@@ -1,0 +1,88 @@
+-- RLS para sesiones anónimas en Tendr · F4
+--
+-- Las policies de F3 aplican IDÉNTICAMENTE a usuarios anónimos y autenticados
+-- porque `(select auth.uid())` devuelve un UUID válido en los dos casos. Esto
+-- es lo que hace que la promoción anónimo a autenticado preserve data sin
+-- migración manual: el UID es el mismo antes y después.
+--
+-- Detalle de roles importante: a nivel de Postgres, una sesión anónima de
+-- Supabase también lleva el rol `authenticated`. Por eso las policies de datos
+-- de F3 usan `to authenticated` y cubren los dos estados con una sola policy.
+-- El aislamiento real lo da el predicado por workspace_id sobre
+-- `(select auth.uid())`, no el rol. Esto explica por qué `auth.role()` está
+-- deprecado: con anonymous sign-ins activos, un check `auth.role() =
+-- 'authenticated'` pasaría también para sesiones anónimas, así que no sirve
+-- como control de autorización.
+--
+-- Este archivo documenta CÓMO verificar que las policies funcionan en los
+-- dos estados, no añade nuevas policies.
+
+-- ============================================================================
+-- Verificación · sesión anónima crea workspace
+-- ============================================================================
+-- Tras signInAnonymously, (select auth.uid()) retorna un UUID válido del tipo
+-- 00000000-0000-0000-0000-000000000000 (UUID v4 generado en el backend).
+-- La policy workspaces_insert_own (`owner_id = (select auth.uid())`, con
+-- `to authenticated`) acepta este UID sin distinción.
+
+-- Test SQL manual (ejecutar como sesión anónima desde supabase-js o SQL
+-- Editor con role configurado):
+--
+--   insert into workspaces (owner_id, name, plan)
+--   values ((select auth.uid()), 'Mi workspace', 'free');
+--
+-- Debe funcionar.
+
+-- ============================================================================
+-- Verificación · data anónima sobrevive a la promoción
+-- ============================================================================
+-- Tras linkIdentity({ provider: 'email' }) y exchangeCodeForSession, el
+-- (select auth.uid()) ES EL MISMO. Las policies select_own_workspace siguen
+-- evaluando true para las rows creadas como anónimo, porque el UID no
+-- cambió.
+
+-- Test SQL para confirmar:
+--
+--   -- Como sesión anónima:
+--   insert into clients (workspace_id, name) values (<ws_id>, 'Cliente A');
+--
+--   -- (Tras promoción a email)
+--   select * from clients where workspace_id = <ws_id>;
+--   -- Debe devolver 'Cliente A'.
+
+-- ============================================================================
+-- Anti-pattern · si auth.uid() cambiara en la promoción
+-- ============================================================================
+-- Si en algún momento Supabase cambiara el comportamiento y la promoción
+-- generara un UID nuevo, habría que añadir un trigger de migración:
+--
+--   create or replace function migrate_anonymous_data(old_uid uuid, new_uid uuid)
+--   returns void
+--   language plpgsql
+--   security definer
+--   as $$
+--   begin
+--     update workspaces set owner_id = new_uid where owner_id = old_uid;
+--     -- ...
+--   end;
+--   $$;
+--
+-- Pero MIENTRAS Supabase preserve el UID con linkIdentity (verificado en
+-- mayo 2026), esta función NO se necesita. La fase 4 valida con tests
+-- automatizados que el UID se preserva.
+
+-- ============================================================================
+-- audit_log de la promoción
+-- ============================================================================
+-- INSERT desde Server Action helper que usa service_role (o desde un
+-- security definer function), porque audit_log no expone INSERT a usuarios
+-- normales.
+--
+--   insert into audit_log (workspace_id, actor_id, action, resource_type, metadata)
+--   values (
+--     <workspace_id>,
+--     <user_id>,
+--     'promote_user',
+--     'auth.users',
+--     jsonb_build_object('from', 'anonymous', 'to', 'email')
+--   );
