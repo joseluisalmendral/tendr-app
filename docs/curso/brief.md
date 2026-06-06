@@ -509,9 +509,9 @@ Duración objetivo: 2–4 minutos.
    - Activar **Supabase Agent Skills**: `npx skills add supabase/agent-skills`. Playbook oficial de Auth: signup, magic link, OAuth, session revocation, JWT lifecycle, anonymous → authenticated promotion.
    - **`proxy.ts`** con `createServerClient` de Supabase + helpers `@supabase/ssr`. Protege rutas autenticadas, deja libres `/`, `/login`, `/auth/callback`, `/api/webhooks/*`.
    - **`app/login/page.tsx`** con form de magic link (un campo email + botón). `useFormStatus` para loading. Manejo de error sin filtrar info sensible.
-   - **`app/auth/callback/route.ts`** route handler que procesa el callback, intercambia el code por session, redirige al `/`. Si el usuario era anónimo, dispara la promoción con `supabase.auth.linkIdentity({ provider: 'email' })`.
+   - **`app/auth/callback/route.ts`** route handler que procesa el callback verificando el `token_hash` con `supabase.auth.verifyOtp({ type, token_hash })` (no `exchangeCodeForSession`: `@supabase/ssr` fija PKCE y un flujo iniciado en servidor no tiene `code_verifier`), redirige a `/app`. La promoción del anónimo se dispara en el login con `supabase.auth.updateUser({ email })`.
    - **`lib/auth/get-current-workspace.ts`** helper server-side: lee la sesión, busca workspace del user (asumiendo 1:1 en MVP), devuelve `{ user, workspaceId }`.
-4. **Promoción de sesión anónima → autenticada:** Supabase preserva el `auth.uid()` al usar `linkIdentity`. La data anónima migra sin migración manual gracias a RLS por `user_id`.
+4. **Promoción de sesión anónima → autenticada:** Supabase preserva el `auth.uid()` al usar `updateUser({ email })` (adjunta el email a la misma fila de `auth.users`; `linkIdentity` solo acepta OAuth/OIDC y no compila con `'email'`). La data anónima migra sin migración manual gracias a RLS por `user_id`.
 5. **Tests del flujo (Vitest + Supabase local):**
    - Sesión anónima crea workspace + cliente + caso.
    - Promoción a email vía magic link.

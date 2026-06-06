@@ -36,7 +36,8 @@
 -- ============================================================================
 -- Verificación · data anónima sobrevive a la promoción
 -- ============================================================================
--- Tras linkIdentity({ provider: 'email' }) y exchangeCodeForSession, el
+-- Tras updateUser({ email }) (la conversión del anónimo; linkIdentity NO
+-- aplica, solo acepta OAuth/OIDC) y el verifyOtp del callback, el
 -- (select auth.uid()) ES EL MISMO. Las policies select_own_workspace siguen
 -- evaluando true para las rows creadas como anónimo, porque el UID no
 -- cambió.
@@ -67,22 +68,40 @@
 --   end;
 --   $$;
 --
--- Pero MIENTRAS Supabase preserve el UID con linkIdentity (verificado en
--- mayo 2026), esta función NO se necesita. La fase 4 valida con tests
--- automatizados que el UID se preserva.
+-- Pero MIENTRAS Supabase preserve el UID con updateUser({ email })
+-- (verificado contra los tipos instalados), esta función NO se necesita. La
+-- fase 4 valida con tests automatizados que el UID se preserva.
 
 -- ============================================================================
 -- audit_log de la promoción
 -- ============================================================================
--- INSERT desde Server Action helper que usa service_role (o desde un
--- security definer function), porque audit_log no expone INSERT a usuarios
--- normales.
+-- audit_log no expone INSERT a usuarios normales. En este proyecto
+-- service_role está PROHIBIDO: el INSERT va por una función SECURITY DEFINER
+-- invocada con el client del propio usuario vía supabase.rpc('log_promotion').
+-- El actor sale de auth.uid() (no forjable desde el cliente) y la función no
+-- recibe argumentos. search_path='' evita hijack de schema; hay que revocar
+-- EXECUTE de PUBLIC y, EXPLÍCITAMENTE, de anon y service_role (los default
+-- privileges de Supabase se los conceden), y concederlo solo a authenticated.
 --
---   insert into audit_log (workspace_id, actor_id, action, resource_type, metadata)
---   values (
---     <workspace_id>,
---     <user_id>,
---     'promote_user',
---     'auth.users',
---     jsonb_build_object('from', 'anonymous', 'to', 'email')
---   );
+--   create or replace function public.log_promotion()
+--   returns void
+--   language plpgsql
+--   security definer
+--   set search_path = ''
+--   as $$
+--   declare v_uid uuid := auth.uid();
+--           v_ws  uuid;
+--   begin
+--     if v_uid is null then
+--       raise exception 'log_promotion: no authenticated user';
+--     end if;
+--     select id into v_ws from public.workspaces where owner_id = v_uid limit 1;
+--     insert into public.audit_log
+--       (action, actor_id, resource_type, resource_id, workspace_id, metadata)
+--     values
+--       ('promote_user', v_uid, 'user', v_uid, v_ws, '{}'::jsonb);
+--   end; $$;
+--
+--   revoke execute on function public.log_promotion() from public;
+--   revoke execute on function public.log_promotion() from anon, service_role;
+--   grant  execute on function public.log_promotion() to authenticated;
