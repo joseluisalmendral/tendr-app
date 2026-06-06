@@ -1,0 +1,30 @@
+{
+  "_doc": "Single source of truth for pinned audit-tool versions. Edit ONLY via scripts/update-tools.sh, which enforces the security gates (cooldown + integrity + advisory + smoke test). A manual edit bypasses every gate — don't.",
+  "policy": {
+    "minReleaseAgeDays": 14,
+    "blockHighOrCriticalAdvisories": true,
+    "requireSmokeTestOnMajorBump": true
+  },
+  "tools": {
+    "@unlighthouse/cli": {
+      "version": "0.17.9",
+      "bin": "unlighthouse-ci",
+      "integrity": "sha512-N8x3bpQ/rAxa4vmz+QDyLvUQ1DHctv7ExGqQDbVMS6xW+im/5d1zlGFqA4FZybrcva80djabq/B/szaAbIC8OQ==",
+      "releaseDate": "2026-04-15T16:28:35.498Z",
+      "approvedAt": "2026-06-05",
+      "approvedBy": "initial-pin",
+      "smokeHelpCmd": "ci --help",
+      "smokeFlags": ["--site", "--urls", "--output-path", "--reporter"]
+    },
+    "@axe-core/cli": {
+      "version": "4.11.3",
+      "bin": "axe",
+      "integrity": "sha512-l6cbHsawKr8G0taTfFNKHghZr703cVGQ5+o53CmCoAW53x4KIuQ6T6bXFwW/8odh92JVMqHzBJi84QH0ne+paw==",
+      "releaseDate": "2026-04-30T11:05:31.266Z",
+      "approvedAt": "2026-06-05",
+      "approvedBy": "initial-pin",
+      "smokeHelpCmd": "--help",
+      "smokeFlags": ["--save", "--dir", "--chromedriver-path", "--timeout"]
+    }
+  }
+}

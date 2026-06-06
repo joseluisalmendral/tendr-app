@@ -1,0 +1,4 @@
+# Hardened mode rebuilds node_modules from the committed package-lock.json
+# via `npm ci`. Only the lock is committed (integrity-pins the full tree);
+# never the installed tree.
+node_modules/

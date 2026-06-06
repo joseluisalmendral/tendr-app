@@ -1,0 +1,10 @@
+{
+  "name": "landing-auditor-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hardened-mode dependency manifest for landing-auditor CLIs. Versions MUST match tools.lock.json (kept in sync by scripts/update-tools.sh). The committed package-lock.json integrity-pins the full transitive tree; `npm ci` verifies every tarball at install. Do not edit by hand.",
+  "dependencies": {
+    "@axe-core/cli": "4.11.3",
+    "@unlighthouse/cli": "0.17.9"
+  }
+}
