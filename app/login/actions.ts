@@ -57,7 +57,7 @@ export async function sendMagicLink(
   if (!parsed.success) {
     return {
       status: "error",
-      message: "Ingresá un correo electrónico válido.",
+      message: "Introduce un correo electrónico válido.",
     };
   }
 

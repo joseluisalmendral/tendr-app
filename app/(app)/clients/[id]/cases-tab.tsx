@@ -135,7 +135,7 @@ export function CasesTab({
         <DialogHeader>
           <DialogTitle>Nuevo caso</DialogTitle>
           <DialogDescription>
-            Creá un caso para este cliente. Solo el título es obligatorio.
+            Crea un caso para este cliente. Solo el título es obligatorio.
           </DialogDescription>
         </DialogHeader>
 
@@ -260,7 +260,7 @@ export function CasesTab({
             </EmptyMedia>
             <EmptyTitle>Todavía no hay casos</EmptyTitle>
             <EmptyDescription>
-              Creá el primer caso para empezar a seguir el trabajo de este
+              Crea el primer caso para empezar a seguir el trabajo de este
               cliente.
             </EmptyDescription>
           </EmptyHeader>

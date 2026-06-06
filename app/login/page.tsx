@@ -40,7 +40,7 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-full w-full max-w-sm flex-col justify-center gap-6 px-6 py-16">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Ingresá a Tendr</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Accede a Tendr</h1>
         <p className="text-zinc-600 dark:text-zinc-400">
           Te enviamos un enlace de acceso a tu correo. No necesitás contraseña.
         </p>

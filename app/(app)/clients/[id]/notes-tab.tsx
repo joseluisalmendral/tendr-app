@@ -94,7 +94,7 @@ export function NotesTab({
           rows={4}
           required
           maxLength={NOTE_BODY_MAX_LENGTH}
-          placeholder="Escribí una nota. Soporta Markdown: **negrita**, listas, etc."
+          placeholder="Escribe una nota. Soporta Markdown: **negrita**, listas, etc."
           aria-invalid={Boolean(bodyError)}
         />
         {bodyError ? (
@@ -133,7 +133,7 @@ export function NotesTab({
             </EmptyMedia>
             <EmptyTitle>Todavía no hay notas</EmptyTitle>
             <EmptyDescription>
-              Guardá la primera nota para dejar registro de este cliente.
+              Guarda la primera nota para dejar registro de este cliente.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
