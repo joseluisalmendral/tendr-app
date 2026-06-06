@@ -14,8 +14,7 @@ Lista consolidada de las env vars del proyecto. Este documento **no contiene val
 | `NEXT_PUBLIC_SUPABASE_URL` | F3 | Dashboard → Settings → API → Project URL | Cliente + server | Pública |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | F3 | Dashboard → Settings → API Keys (`sb_publishable_...`) | Cliente + server | Pública (RLS es la barrera real) |
 | `SUPABASE_SECRET_KEY` | F3 | Dashboard → Settings → API Keys (`sb_secret_...`) | Server-only | **Crítica** — bypassa RLS |
-| `DATABASE_URL` | F3 | Dashboard → Settings → Database → Connection string (Transaction pooler, puerto 6543) | Server-only (Drizzle runtime) | **Crítica** — contiene password de BD |
-| `DIRECT_URL` | F3 | Igual que arriba, Direct connection (puerto 5432) | Server-only (solo `drizzle-kit` migrate) | **Crítica** — contiene password de BD |
+| `DATABASE_URL` | F3 | Botón **Connect** → Connection string (Supavisor **Session mode**, puerto 5432; password URI-encoded) | Server-only (Drizzle runtime + `drizzle-kit` migrate) | **Crítica** — contiene password de BD |
 
 ## Inngest (F6 local · F10 producción)
 
