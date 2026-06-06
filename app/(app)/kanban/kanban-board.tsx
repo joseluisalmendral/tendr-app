@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import {
+  type CollisionDetection,
   DndContext,
   type DragEndEvent,
   KeyboardCode,
@@ -14,6 +15,7 @@ import {
   PointerSensor,
   closestCorners,
   getFirstCollision,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
@@ -210,7 +212,7 @@ export function KanbanBoard({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={boardCollisionDetection}
       onDragEnd={handleDragEnd}
     >
       <div className="grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -334,6 +336,22 @@ const ARROW_KEYS: readonly string[] = [
  * Space/Enter (grab/drop) and Escape (cancel) are handled by the KeyboardSensor
  * itself and are unaffected.
  */
+/**
+ * Board-level collision detection. `rectIntersection` first: a card placed
+ * INSIDE a column (pointer drag or keyboard jump) intersects that column's
+ * droppable rect, so it wins over the card's now-distant original slot.
+ * Plain `closestCorners` failed here for tall empty columns: the original
+ * slot's four corners (same Y, ~one column away) average closer than the
+ * empty column's far-down bottom corners, so keyboard moves resolved back
+ * onto the active card itself. Fall back to `closestCorners` only when
+ * nothing intersects (e.g. dragging in the gap between columns).
+ */
+const boardCollisionDetection: CollisionDetection = (args) => {
+  const intersections = rectIntersection(args);
+  if (intersections.length > 0) return intersections;
+  return closestCorners(args);
+};
+
 const multipleContainersCoordinateGetter: KeyboardCoordinateGetter = (
   event,
   { context: { active, droppableRects, droppableContainers, collisionRect } },
