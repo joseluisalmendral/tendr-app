@@ -101,7 +101,7 @@ export function NewClientDialog({
         <DialogHeader>
           <DialogTitle>Nuevo cliente</DialogTitle>
           <DialogDescription>
-            Agregá un cliente a tu workspace. Solo el nombre es obligatorio.
+            Agrega un cliente a tu workspace. Solo el nombre es obligatorio.
           </DialogDescription>
         </DialogHeader>
 

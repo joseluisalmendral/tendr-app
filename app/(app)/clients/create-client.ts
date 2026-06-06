@@ -121,7 +121,7 @@ export async function createClientInWorkspace(
     }
     return {
       status: "error",
-      message: "Revisá los campos marcados.",
+      message: "Revisa los campos marcados.",
       fieldErrors,
     };
   }

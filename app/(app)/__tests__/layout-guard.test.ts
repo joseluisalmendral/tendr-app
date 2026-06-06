@@ -78,4 +78,38 @@ describe("(app) layout session guard", () => {
 
     expect(result).toBeNull();
   });
+
+  it("sees a just-provisioned workspace on a fresh resolve (dashboard one-request fix)", async () => {
+    // Regression guard for the blank-dashboard bug: the dashboard provisions a
+    // workspace for a fresh anonymous visitor and must render it in ONE request.
+    // getCurrentWorkspace() is React.cache()'d, so re-reading it post-provision
+    // returns the stale (workspaceId === null) value. The fix re-reads through
+    // the UNCACHED resolver seam. This asserts that contract: a fresh
+    // resolveCurrentWorkspace() on the same session sees the new workspace.
+    const anon = makeAnonClient();
+    const { data, error } = await anon.auth.signInAnonymously();
+    expect(error).toBeNull();
+    const anonUserId = data.user?.id;
+    expect(anonUserId).toBeTruthy();
+
+    try {
+      // Pre-provision: no workspace yet (mirrors the dashboard's first read).
+      const before = await resolveCurrentWorkspace(anon);
+      expect(before?.workspaceId).toBeNull();
+
+      // Provision under the same session, exactly as ensureAnonymousWorkspace.
+      const { error: upsertError } = await anon.from("workspaces").upsert(
+        { owner_id: anonUserId, name: "Mi workspace" },
+        { onConflict: "owner_id", ignoreDuplicates: true },
+      );
+      expect(upsertError).toBeNull();
+
+      // Fresh resolve (the uncached seam) now sees the workspace.
+      const after = await resolveCurrentWorkspace(anon);
+      expect(after?.workspaceId).not.toBeNull();
+      expect(after?.workspaceName).toBe("Mi workspace");
+    } finally {
+      await anon.auth.signOut();
+    }
+  });
 });

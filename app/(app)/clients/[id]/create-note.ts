@@ -93,7 +93,7 @@ export async function createNoteInWorkspace(
     }
     return {
       status: "error",
-      message: "Revisá la nota.",
+      message: "Revisa la nota.",
       fieldErrors,
     };
   }

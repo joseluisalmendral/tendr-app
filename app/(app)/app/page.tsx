@@ -30,8 +30,17 @@ export default async function DashboardPage() {
   let current = await getCurrentWorkspace();
 
   if (current && current.workspaceId === null) {
-    await ensureAnonymousWorkspace();
-    current = await getCurrentWorkspace();
+    // No re-read after provisioning: getCurrentWorkspace is React.cache()'d
+    // AND Next.js memoizes identical PostgREST GETs within the same render
+    // pass, so any same-request re-query returns the stale pre-provision
+    // empty result. ensureAnonymousWorkspace already returns the provisioned
+    // workspace — use it directly.
+    const ensured = await ensureAnonymousWorkspace();
+    current = {
+      ...current,
+      workspaceId: ensured.workspaceId,
+      workspaceName: ensured.workspaceName,
+    };
   }
 
   // The layout guard makes this unreachable; handled defensively.
