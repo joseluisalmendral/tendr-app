@@ -22,3 +22,4 @@ Next.js 16 (App Router, RSC + Server Actions) + Supabase (Postgres + RLS + Stora
 - Documentación del curso en `docs/curso/` (refrescable con `bash scripts/bootstrap-docs-curso.sh`).
 - RLS profunda obligatoria: cada tabla con `workspace_id` tiene policies SELECT+INSERT+UPDATE+DELETE testeadas.
 - BYO key con envelope AES-256-GCM: plaintext key nunca en BD, logs ni cliente.
+- **Cierre de fase = verificación visual obligatoria**: antes de cada tag `clase-N`, pasar la checklist de `docs/testing-playbook.md` con navegador real (Playwright) contra el stack local. Tests verdes NO bastan (F5: 52/52 verdes con 4 bugs de producción vivos). Gotchas de entorno y framework documentados ahí.
