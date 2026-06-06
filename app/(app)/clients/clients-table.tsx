@@ -142,7 +142,7 @@ export function ClientsTable({
             </SelectContent>
           </Select>
         </div>
-        <NewClientDialog onCreated={addOptimisticClient} />
+        <NewClientDialog addOptimisticClient={addOptimisticClient} />
       </div>
 
       {hasClients ? (
@@ -220,7 +220,7 @@ export function ClientsTable({
               Creá el primero para empezar a organizar tus casos.
             </EmptyDescription>
           </EmptyHeader>
-          <NewClientDialog onCreated={addOptimisticClient} />
+          <NewClientDialog addOptimisticClient={addOptimisticClient} />
         </Empty>
       )}
     </div>
