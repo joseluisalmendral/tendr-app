@@ -15,6 +15,11 @@ export type CurrentWorkspace = {
    */
   workspaceId: string | null;
   /**
+   * Display name of the current workspace. Null when the user has no
+   * workspace yet (same condition as workspaceId === null).
+   */
+  workspaceName: string | null;
+  /**
    * From Supabase's `is_anonymous` flag. Never inferred from the absence of
    * an email: a user can have a linked email and still be anonymous until
    * the magic link is verified.
@@ -44,7 +49,7 @@ export const getCurrentWorkspace = cache(
     // workspaces_select_own RLS policy scopes this query to the caller.
     const { data: workspace, error } = await supabase
       .from("workspaces")
-      .select("id")
+      .select("id, name")
       .eq("owner_id", user.id)
       .maybeSingle();
 
@@ -57,6 +62,7 @@ export const getCurrentWorkspace = cache(
     return {
       user,
       workspaceId: workspace?.id ?? null,
+      workspaceName: workspace?.name ?? null,
       isAnonymous: user.is_anonymous ?? false,
     };
   },
