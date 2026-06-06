@@ -132,8 +132,11 @@ cp "$CURRICULUM/guias/modulo-5/leccion-17/fases/F8-pagos-stripe-sandbox/recursos
 cp "$CURRICULUM/guias/modulo-5/leccion-17/fases/F10-cicd-observabilidad-deploy/recursos/plantillas/github-actions-ci.yml" docs/curso/plantillas/
 cp "$CURRICULUM/guias/modulo-5/leccion-17/fases/F10-cicd-observabilidad-deploy/recursos/plantillas/adr-reabierto-template.md" docs/curso/plantillas/
 
-# Skill landing-auditor reusada en F9 para auditar las páginas públicas (SEO/GEO/perf/a11y)
-SKILL_SRC="$CURRICULUM/guias/modulo-5/leccion-16/fases/F8-skill-auditoria-multicapa/recursos/plantillas/skill-source"
+# Skill landing-auditor COMPLETA (versión terminada: scripts de SEO/GEO/performance/a11y/motion
+# + helper _lib + herramientas pineadas en tools/), reusada en F9 para auditar las páginas
+# públicas. Se copia la completa, NO la semilla parcial de L16, para que tengas todos los
+# scripts y elijas qué capas correr en cada invocación.
+SKILL_SRC="$CURRICULUM/guias/modulo-5/leccion-17/fases/F9-qa-e2e-visual/recursos/plantillas/skill-source"
 if [ -d "$SKILL_SRC" ]; then
   rm -rf docs/curso/plantillas/skill-source
   cp -R "$SKILL_SRC" docs/curso/plantillas/
