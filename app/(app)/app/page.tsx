@@ -11,9 +11,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { resolveCurrentWorkspace } from "@/lib/auth/resolve-current-workspace";
 import { getCurrentWorkspace } from "@/lib/auth/get-current-workspace";
-import { createClient } from "@/lib/supabase/server";
 
 import { DashboardCards } from "./dashboard-cards";
 import { getRecentActivity } from "./dashboard-activity";
@@ -32,13 +30,17 @@ export default async function DashboardPage() {
   let current = await getCurrentWorkspace();
 
   if (current && current.workspaceId === null) {
-    await ensureAnonymousWorkspace();
-    // getCurrentWorkspace is React.cache()'d for the request, so re-reading it
-    // here would return the stale pre-provision value (workspaceId === null)
-    // and the dashboard would render blank. Re-read through the UNCACHED pure
-    // seam with a fresh server client so the just-provisioned workspace is
-    // visible within this single request.
-    current = await resolveCurrentWorkspace(await createClient());
+    // No re-read after provisioning: getCurrentWorkspace is React.cache()'d
+    // AND Next.js memoizes identical PostgREST GETs within the same render
+    // pass, so any same-request re-query returns the stale pre-provision
+    // empty result. ensureAnonymousWorkspace already returns the provisioned
+    // workspace — use it directly.
+    const ensured = await ensureAnonymousWorkspace();
+    current = {
+      ...current,
+      workspaceId: ensured.workspaceId,
+      workspaceName: ensured.workspaceName,
+    };
   }
 
   // The layout guard makes this unreachable; handled defensively.

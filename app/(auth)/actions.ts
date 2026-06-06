@@ -17,6 +17,7 @@ const DEFAULT_WORKSPACE_NAME = "Mi workspace";
  */
 export async function ensureAnonymousWorkspace(): Promise<{
   workspaceId: string;
+  workspaceName: string;
 }> {
   const supabase = await createClient();
 
@@ -37,7 +38,7 @@ export async function ensureAnonymousWorkspace(): Promise<{
 
   const { data: workspace, error: selectError } = await supabase
     .from("workspaces")
-    .select("id")
+    .select("id, name")
     .eq("owner_id", user.id)
     .single();
   if (selectError) {
@@ -46,7 +47,7 @@ export async function ensureAnonymousWorkspace(): Promise<{
     });
   }
 
-  return { workspaceId: workspace.id };
+  return { workspaceId: workspace.id, workspaceName: workspace.name };
 }
 
 /**
