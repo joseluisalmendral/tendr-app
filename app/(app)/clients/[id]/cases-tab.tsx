@@ -160,7 +160,7 @@ export function CasesTab({
             <Label htmlFor="status">Estado</Label>
             <Select name="status" defaultValue="prospect">
               <SelectTrigger id="status" aria-invalid={Boolean(fieldErrors.status)}>
-                <SelectValue placeholder="Elegí un estado" />
+                <SelectValue placeholder="Elige un estado" />
               </SelectTrigger>
               <SelectContent>
                 {CASE_STATUS_VALUES.map((value) => (

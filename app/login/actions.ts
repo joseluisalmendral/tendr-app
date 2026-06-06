@@ -23,14 +23,14 @@ const emailSchema = z.object({
 // limits, malformed addresses at the provider, and network failures so the
 // response never depends on whether the email is registered.
 const GENERIC_ERROR =
-  "No pudimos enviar el enlace. Revisá la dirección e intentá de nuevo.";
+  "No pudimos enviar el enlace. Revisa la dirección e inténtalo de nuevo.";
 
 // Surfaced ONLY when the email already belongs to another permanent account.
 // MVP has no account merge, so the user must use a different address. This is
 // a usability message for a dead-end, not an enumeration oracle for arbitrary
 // addresses (it can only ever fire for an anonymous user's own attach attempt).
 const EMAIL_TAKEN_ERROR =
-  "Ese correo ya está en uso. Probá con otra dirección.";
+  "Ese correo ya está en uso. Prueba con otra dirección.";
 
 function redirectTo(): string {
   return `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`;

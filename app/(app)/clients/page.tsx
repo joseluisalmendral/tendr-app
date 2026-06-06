@@ -48,7 +48,7 @@ export default async function ClientsPage() {
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Clientes</h1>
         <p className="text-sm text-muted-foreground">
-          Gestioná tus clientes y sus casos.
+          Gestiona tus clientes y sus casos.
         </p>
       </div>
 

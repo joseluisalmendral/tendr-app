@@ -56,7 +56,7 @@ export type CreateCaseState =
 const createCaseSchema = z.object({
   title: z.string().trim().min(1, "El título es obligatorio."),
   status: z.enum(CASE_STATUS_VALUES, {
-    message: "Elegí un estado válido.",
+    message: "Elige un estado válido.",
   }),
   valueCents: z
     .union([
@@ -118,7 +118,7 @@ export async function createCaseInWorkspace(
     }
     return {
       status: "error",
-      message: "Revisá los campos marcados.",
+      message: "Revisa los campos marcados.",
       fieldErrors,
     };
   }

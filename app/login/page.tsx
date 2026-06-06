@@ -28,9 +28,9 @@ export default function LoginPage() {
   if (state.status === "sent") {
     return (
       <main className="mx-auto flex min-h-full w-full max-w-sm flex-col justify-center gap-4 px-6 py-16">
-        <h1 className="text-2xl font-semibold tracking-tight">Revisá tu correo</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Revisa tu correo</h1>
         <p className="text-zinc-600 dark:text-zinc-400">
-          Si la dirección es válida, te enviamos un enlace para acceder. Abrí el
+          Si la dirección es válida, te enviamos un enlace para acceder. Abre el
           correo desde este mismo dispositivo para completar el ingreso.
         </p>
       </main>
@@ -42,7 +42,7 @@ export default function LoginPage() {
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Accede a Tendr</h1>
         <p className="text-zinc-600 dark:text-zinc-400">
-          Te enviamos un enlace de acceso a tu correo. No necesitás contraseña.
+          Te enviamos un enlace de acceso a tu correo. No necesitas contraseña.
         </p>
       </div>
 

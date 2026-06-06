@@ -260,7 +260,7 @@ otp_expiry = 3600
 # dashboard templates must be updated separately by the user (out of code
 # scope).
 [auth.email.template.confirmation]
-subject = "Confirmá tu correo en Tendr"
+subject = "Confirma tu correo en Tendr"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.magic_link]
@@ -268,7 +268,7 @@ subject = "Tu enlace de acceso a Tendr"
 content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.email_change]
-subject = "Confirmá tu correo en Tendr"
+subject = "Confirma tu correo en Tendr"
 content_path = "./supabase/templates/email_change.html"
 
 # Uncomment to customize notification email template
