@@ -1,16 +1,30 @@
+import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "vitest/config";
 
 /**
- * Vitest config for the F3 RLS suite.
+ * Vitest config for the RLS + workspace-core suites.
  *
  * Tests run against the LOCAL Supabase stack (`supabase start`). The setup
  * file resolves local credentials at runtime and provisions two isolated
- * tenants. RLS tests are inherently sequential and stateful, so the suite runs
- * single-threaded with a generous hook timeout for auth provisioning.
+ * tenants. These tests share the local stack and are stateful, so the suite
+ * runs single-threaded with a generous hook timeout for auth provisioning.
+ *
+ * The `@/` alias mirrors tsconfig `paths` so app/lib modules (e.g. the
+ * dashboard count queries) can be imported directly in tests.
  */
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL(".", import.meta.url)),
+    },
+  },
   test: {
-    include: ["db/__tests__/**/*.test.ts"],
+    include: [
+      "db/__tests__/**/*.test.ts",
+      "app/**/__tests__/**/*.test.ts",
+      "lib/**/__tests__/**/*.test.ts",
+    ],
     environment: "node",
     // RLS tests share the local stack and mutate tenant state — keep them
     // strictly sequential, one fork at a time.
