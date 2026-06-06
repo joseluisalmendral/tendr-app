@@ -102,13 +102,27 @@ export function useWorkspaceRealtime<Row extends Record<string, unknown>>({
       );
     }
 
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        onSubscribedRef.current?.();
-      }
+    // CRITICAL: authenticate the realtime socket with the user's JWT BEFORE
+    // subscribing. supabase-js only auto-calls realtime.setAuth() on
+    // SIGNED_IN / TOKEN_REFRESHED — NOT on INITIAL_SESSION (session restored
+    // from cookies on page load, i.e. every already-logged-in visit). Without
+    // it the WAL-RLS worker evaluates the subscriber as `anon`, whose RLS
+    // grants see zero rows, so the channel joins fine but NO postgres_changes
+    // events are ever delivered. setAuth() with no args pulls the current
+    // session token. Verified empirically in the browser (events only arrive
+    // with this call) and in the integration test (same finding, bug #694).
+    let cancelled = false;
+    void supabase.realtime.setAuth().then(() => {
+      if (cancelled) return;
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          onSubscribedRef.current?.();
+        }
+      });
     });
 
     return () => {
+      cancelled = true;
       void supabase.removeChannel(channel);
     };
   }, [workspaceId, table, eventsKey]);

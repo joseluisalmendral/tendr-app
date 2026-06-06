@@ -170,7 +170,16 @@ export function KanbanBoard({
 
       startTransition(async () => {
         applyOptimisticMove({ caseId, newStatus: targetStatus });
-        const result = await moveCase(caseId, targetStatus);
+        let result: Awaited<ReturnType<typeof moveCase>>;
+        try {
+          result = await moveCase(caseId, targetStatus);
+        } catch {
+          // Network failure (offline, aborted request): the Server Action
+          // rejects instead of returning a structured error. Same rollback
+          // path — no refresh → useOptimistic auto-reverts to the server base.
+          toast.error("Sin conexión. No se pudo mover el caso, vuelve a intentarlo.");
+          return;
+        }
         if (result.status === "error") {
           // No refresh → useOptimistic auto-reverts to the server base.
           toast.error(result.message);
@@ -365,21 +374,31 @@ const multipleContainersCoordinateGetter: KeyboardCoordinateGetter = (
   const isForward =
     event.code === KeyboardCode.Right || event.code === KeyboardCode.Down;
 
-  // Candidate droppables: skip the active item itself.
+  // The card sits INSIDE its column (padding), so the column's own left edge
+  // is slightly left of the card's — edge-based compares made the CURRENT
+  // column a valid "left" candidate and closestCorners would pick it (a
+  // same-column no-op). Compare CENTERS instead, and skip any container whose
+  // rect contains the card's center (that is the column we are already in).
+  const centerX = collisionRect.left + collisionRect.width / 2;
+  const centerY = collisionRect.top + collisionRect.height / 2;
   const candidates = droppableContainers.getEnabled().filter((container) => {
     if (container.id === active.id) return false;
     const rect = droppableRects.get(container.id);
     if (!rect) return false;
+    const containsCenter =
+      rect.left <= centerX &&
+      centerX <= rect.right &&
+      rect.top <= centerY &&
+      centerY <= rect.bottom;
+    if (containsCenter) return false;
+    const rectCenterX = rect.left + rect.width / 2;
+    const rectCenterY = rect.top + rect.height / 2;
     if (isHorizontal) {
       // Columns are laid out horizontally → compare on the X axis.
-      return isForward
-        ? rect.left > collisionRect.left
-        : rect.left < collisionRect.left;
+      return isForward ? rectCenterX > centerX : rectCenterX < centerX;
     }
     // Within a column, cards are stacked vertically → compare on the Y axis.
-    return isForward
-      ? rect.top > collisionRect.top
-      : rect.top < collisionRect.top;
+    return isForward ? rectCenterY > centerY : rectCenterY < centerY;
   });
 
   if (candidates.length === 0) return;
