@@ -1,5 +1,7 @@
 "use server";
 
+import { redirect } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/server";
 
 const DEFAULT_WORKSPACE_NAME = "Mi workspace";
@@ -45,4 +47,18 @@ export async function ensureAnonymousWorkspace(): Promise<{
   }
 
   return { workspaceId: workspace.id };
+}
+
+/**
+ * Logs the current user out of ALL sessions and returns them to the landing
+ * page.
+ *
+ * `scope: "global"` revokes every refresh token for the user, not just the
+ * current device. On the next request the proxy mints a fresh anonymous
+ * session, so a logged-out visitor keeps browsing without a forced /login.
+ */
+export async function logout(): Promise<never> {
+  const supabase = await createClient();
+  await supabase.auth.signOut({ scope: "global" });
+  redirect("/");
 }
