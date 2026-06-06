@@ -2,6 +2,8 @@
 
 import { useMemo, useOptimistic, useState } from "react";
 
+import Link from "next/link";
+
 import { UsersIcon } from "@phosphor-icons/react";
 
 import { Badge } from "@/components/ui/badge";
@@ -162,7 +164,16 @@ export function ClientsTable({
                 filtered.map((client) => (
                   <TableRow key={client.id} className="text-sm">
                     <TableCell className="py-2 font-medium">
-                      {client.name}
+                      {client.id.startsWith("optimistic-") ? (
+                        client.name
+                      ) : (
+                        <Link
+                          href={`/clients/${client.id}`}
+                          className="transition-colors hover:text-primary hover:underline"
+                        >
+                          {client.name}
+                        </Link>
+                      )}
                     </TableCell>
                     <TableCell className="py-2 text-muted-foreground">
                       {client.email ?? "—"}
