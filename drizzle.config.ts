@@ -13,6 +13,9 @@ export default defineConfig({
   dialect: "postgresql",
   schema: "./db/schema",
   out: "./db/migrations",
+  // Only manage the `public` schema. Supabase owns `auth`; FK references to
+  // auth.users must NOT cause drizzle-kit to emit CREATE SCHEMA/TABLE for it.
+  schemaFilter: ["public"],
   dbCredentials: {
     // DATABASE_URL points at the Postgres session port (5432). Never commit the
     // value; it is read from the environment at generate/migrate time only.
