@@ -5,7 +5,7 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@/db/schema";
 import { documents, jobs } from "@/db/schema";
 
-import { isTerminalStatus, type JobStatus } from "./use-job";
+import { isTerminalStatus, type JobStatus } from "./job-status";
 
 /**
  * Pure, import-testable document-delete logic for the `deleteDocument` Server
@@ -60,7 +60,7 @@ const STORAGE_BUCKET = "documents";
 /**
  * Pure guard: a document may be deleted only when its latest job is terminal
  * (completed/failed) or there is no job at all. `pending`/`running` block the
- * delete. Reuses the `isTerminalStatus` semantics from use-job.ts so the two
+ * delete. Reuses the `isTerminalStatus` semantics from job-status.ts so the two
  * never drift (pending/running are the only non-terminal states).
  */
 export function canDeleteDocument(latestJobStatus: JobStatus | null): boolean {
