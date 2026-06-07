@@ -1,16 +1,27 @@
 "use server";
 
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { ensureAnonymousWorkspace } from "@/app/(auth)/actions";
+import { db } from "@/db";
+import { jobs } from "@/db/schema";
+import { serviceDb } from "@/db/service";
+import { inngest } from "@/inngest/client";
 import { getCurrentWorkspace } from "@/lib/auth/get-current-workspace";
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { createCaseInWorkspace, type CreateCaseState } from "./create-case";
 import { createNoteInWorkspace, type CreateNoteState } from "./create-note";
+import {
+  getDocumentSignedUrlWith,
+  uploadDocumentWith,
+  type UploadDocumentResult,
+} from "./upload-document";
 
 export type { CreateCaseState } from "./create-case";
 export type { CreateNoteState } from "./create-note";
+export type { UploadDocumentResult } from "./upload-document";
 
 /**
  * Resolves the caller's workspace from the session, provisioning an anonymous
@@ -67,6 +78,90 @@ export async function createCase(
   }
 
   return result;
+}
+
+/**
+ * Marks a job `failed` from the privileged service_role connection (jobs UPDATE
+ * is service_role-only per the F3 RLS deviation). Injected into the upload seam
+ * so a post-commit Inngest send failure leaves a terminal job, not a zombie.
+ */
+async function markJobFailed(
+  jobId: string,
+  errorCode: string,
+  message: string,
+): Promise<void> {
+  await serviceDb
+    .update(jobs)
+    .set({
+      status: "failed",
+      error: message,
+      result: { error_code: errorCode, message },
+      completedAt: new Date(),
+    })
+    .where(eq(jobs.id, jobId));
+}
+
+/**
+ * Server Action: uploads a PDF for a client, persists documents + a pending
+ * extraction job, and enqueues the Inngest worker.
+ *
+ * Thin cookie wrapper around the pure `uploadDocumentWith`: it resolves the
+ * caller's workspace and the cookie-bound Supabase client, then injects every
+ * effect (Storage via the user-session client, the Drizzle tx, the Inngest
+ * send, and the serviceDb-backed `markJobFailed` recovery). Returns `{ ok }`.
+ */
+export async function uploadDocument(
+  formData: FormData,
+): Promise<UploadDocumentResult> {
+  const workspaceId = await resolveWorkspaceId();
+  if (!workspaceId) {
+    return {
+      ok: false,
+      errorCode: "validation_error",
+      error: "Your session expired. Please sign in again.",
+    };
+  }
+
+  const file = formData.get("file");
+  const clientId = formData.get("clientId");
+
+  if (!(file instanceof File)) {
+    return {
+      ok: false,
+      errorCode: "validation_error",
+      error: "No file uploaded.",
+    };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const body = await file.arrayBuffer();
+
+  const result = await uploadDocumentWith(
+    { supabase, db, inngest, markJobFailed },
+    {
+      workspaceId,
+      clientId,
+      filename: file.name,
+      mimeType: file.type,
+      size: file.size,
+      body,
+    },
+  );
+
+  if (result.ok && typeof clientId === "string") {
+    revalidatePath(`/clients/${clientId}`);
+  }
+
+  return result;
+}
+
+/**
+ * Server Action: returns a 1h signed download URL for a document the caller
+ * owns (RLS blocks cross-tenant lookups via the user-session client).
+ */
+export async function getDocumentSignedUrl(documentId: string) {
+  const supabase = await createSupabaseServerClient();
+  return getDocumentSignedUrlWith({ supabase, db }, documentId);
 }
 
 /**
