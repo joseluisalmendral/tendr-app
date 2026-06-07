@@ -3,10 +3,14 @@
 import { useState, useTransition } from "react";
 
 import { useRouter } from "next/navigation";
-import { CheckCircleIcon, SpinnerGapIcon } from "@phosphor-icons/react";
+import {
+  CheckCircleIcon,
+  SpinnerGapIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-import { saveProviderKey } from "@/app/actions/ai-settings";
+import { deleteProviderKey, saveProviderKey } from "@/app/actions/ai-settings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -118,7 +123,7 @@ export function ProviderCard({
           )}
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex items-center gap-2">
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm">
@@ -163,8 +168,95 @@ export function ProviderCard({
             </form>
           </DialogContent>
         </Dialog>
+        {configured ? (
+          <RevokeKeyButton provider={provider} label={label} />
+        ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Revoke (delete) the configured key for a provider. A destructive confirm
+ * dialog gates the call (same Dialog-as-confirmation pattern as the document
+ * delete button — the project has no AlertDialog primitive). NO secret is sent:
+ * `deleteProviderKey` takes only the provider id. On success the card returns to
+ * "No configurado" via router.refresh().
+ */
+function RevokeKeyButton({
+  provider,
+  label,
+}: {
+  provider: ProviderId;
+  label: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function onConfirm() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteProviderKey({ provider });
+      if (result.ok) {
+        setOpen(false);
+        toast.success("Key revocada");
+        router.refresh();
+      } else {
+        setError(result.error);
+      }
+    });
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setError(null);
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="text-destructive">
+          <TrashIcon data-icon="inline-start" />
+          Revocar key
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Revocar key de {label}</DialogTitle>
+          <DialogDescription>
+            Vas a eliminar la key cifrada de {label}. Las features que usen este
+            provider dejarán de funcionar hasta que configures una nueva key.
+            Esta acción no se puede deshacer.
+          </DialogDescription>
+        </DialogHeader>
+
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline" disabled={pending}>
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={pending}
+          >
+            {pending ? (
+              <SpinnerGapIcon className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <TrashIcon weight="bold" data-icon="inline-start" />
+            )}
+            {pending ? "Revocando…" : "Revocar key"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
