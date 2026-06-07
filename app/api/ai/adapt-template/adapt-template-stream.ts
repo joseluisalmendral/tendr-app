@@ -7,7 +7,10 @@ import { z } from "zod";
 import type * as schema from "@/db/schema";
 import { aiUsageLedger, clients, templates } from "@/db/schema";
 import { assertWithinBudget, isBudgetExceededError } from "@/lib/ai/cost-budget";
-import { computeCostCents } from "@/lib/ai/compute-cost-cents";
+import {
+  computeCostMicrocents,
+  microcentsToCents,
+} from "@/lib/ai/compute-cost-microcents";
 import {
   getModelForFeature,
   type ModelForFeature,
@@ -206,12 +209,15 @@ export async function adaptTemplateStreamWith(
         model.provider,
         model.modelId,
       );
-      const costCents = computeCostCents(
+      // F7c: bill in USD micro-cents with NO per-call ceil (Langfuse parity).
+      // Dual-write the legacy cost_cents (nearest cent) during the transition.
+      const costMicrocents = computeCostMicrocents(
         inputTokens,
         outputTokens,
         cost?.costPer1kInput ?? 0,
         cost?.costPer1kOutput ?? 0,
       );
+      const costCents = microcentsToCents(costMicrocents);
 
       // Ledger insert only when we have REAL usage (a cancelled stream with no
       // usable token counts must not write a phantom row).
@@ -224,6 +230,7 @@ export async function adaptTemplateStreamWith(
           tokensIn: inputTokens,
           tokensOut: outputTokens,
           costCents,
+          costMicrocents,
         });
       }
 

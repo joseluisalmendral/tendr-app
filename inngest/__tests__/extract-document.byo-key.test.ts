@@ -234,6 +234,7 @@ describe("extractor budget gate (F7)", () => {
       tokensIn: 100,
       tokensOut: 100,
       costCents: 50,
+      costMicrocents: 50 * 10000, // F7c: gate sums micro-cents
     });
 
     const jobId = await makeJob(tenant.workspaceId);

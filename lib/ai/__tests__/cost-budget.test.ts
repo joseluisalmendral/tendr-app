@@ -52,6 +52,26 @@ async function seedUsage(
     tokensIn: 100,
     tokensOut: 50,
     costCents,
+    // F7c: the gate sums micro-cents. Whole-cent helpers dual-write the exact
+    // micro-cents equivalent so the existing percentage assertions hold.
+    costMicrocents: costCents * 10000,
+  });
+}
+
+/** Inserts a ledger row this UTC month billing exact micro-cents (serviceDb). */
+async function seedUsageMicrocents(
+  workspaceId: string,
+  costMicrocents: number,
+): Promise<void> {
+  await serviceDb.insert(aiUsageLedger).values({
+    workspaceId,
+    feature: "summarize",
+    provider: "google",
+    modelId: "gemini-3.5-flash",
+    tokensIn: 100,
+    tokensOut: 50,
+    costCents: Math.round(costMicrocents / 10000),
+    costMicrocents,
   });
 }
 
@@ -70,6 +90,7 @@ async function seedLastMonthUsage(
       tokensIn: 100,
       tokensOut: 50,
       costCents,
+      costMicrocents: costCents * 10000,
     })
     .returning({ id: aiUsageLedger.id });
 
@@ -201,6 +222,49 @@ describe("assertWithinBudget", () => {
     // With an estimate that crosses the cap: 9000 + 1500 >= 10000 -> throws.
     await expect(
       assertWithinBudget(db, tenant.workspaceId, 1_500),
+    ).rejects.toBeInstanceOf(BudgetExceededError);
+  });
+
+  it("accounts sub-cent micro-cent rows exactly and reports real USD spend (F7c)", async () => {
+    // Three sub-cent generations that each round to 0 whole cents under the old
+    // model would have summed to 0; micro-cents accounts them exactly.
+    await seedUsageMicrocents(tenant.workspaceId, 13303); // $0.013303
+    await seedUsageMicrocents(tenant.workspaceId, 4500); // $0.0045
+    await seedUsageMicrocents(tenant.workspaceId, 250); // $0.00025
+
+    const status = await getBudgetStatus(db, tenant.workspaceId);
+
+    expect(status.usedMicrocents).toBe(13303 + 4500 + 250);
+    // 18053 µ¢ = 1.8053 cents -> nearest cent = 2 (display only).
+    expect(status.usedCents).toBe(2);
+    expect(status.withinBudget).toBe(true);
+    expect(status.warningThreshold).toBe(false);
+  });
+
+  it("pins the 80% warning boundary with sub-cent micro-cent rows", async () => {
+    // budget 10000 cents -> 80% = 80_000_000 µ¢. Hit it with a sub-cent tail.
+    await seedUsageMicrocents(tenant.workspaceId, 79_999_999); // just under 80%
+    let status = await assertWithinBudget(db, tenant.workspaceId);
+    expect(status.warningThreshold).toBe(false);
+    expect(status.withinBudget).toBe(true);
+
+    await seedUsageMicrocents(tenant.workspaceId, 1); // crosses to exactly 80%
+    status = await assertWithinBudget(db, tenant.workspaceId);
+    expect(status.warningThreshold).toBe(true);
+    expect(status.withinBudget).toBe(true);
+    expect(status.percentUsed).toBeCloseTo(80, 5);
+  });
+
+  it("pins the 100% gate boundary with a sub-cent overshoot (throws at >= budget)", async () => {
+    // 99.999999% -> passes; one more µ¢ -> exactly 100% -> throws.
+    await seedUsageMicrocents(tenant.workspaceId, 99_999_999);
+    await expect(
+      assertWithinBudget(db, tenant.workspaceId),
+    ).resolves.toMatchObject({ withinBudget: true });
+
+    await seedUsageMicrocents(tenant.workspaceId, 1); // exactly 100%
+    await expect(
+      assertWithinBudget(db, tenant.workspaceId),
     ).rejects.toBeInstanceOf(BudgetExceededError);
   });
 
