@@ -1,17 +1,14 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
+import { Badge } from "@/components/ui/badge";
 import { db } from "@/db";
-import {
-  aiFeatureModelMapping,
-  aiProviderConfigs,
-  aiUsageLedger,
-  workspaces,
-} from "@/db/schema";
+import { aiFeatureModelMapping, aiProviderConfigs } from "@/db/schema";
 import { getCurrentWorkspace } from "@/lib/auth/get-current-workspace";
 import {
   getAvailableModels,
   type FeatureRequirements,
 } from "@/lib/ai/manifest";
+import { getBudgetStatus } from "@/lib/ai/cost-budget";
 
 import {
   FeatureModelRow,
@@ -31,10 +28,10 @@ import { ProviderCard, type ProviderId } from "./provider-card";
  * roles and only ever touched via serviceDb in getProviderClient). Every read
  * carries an explicit workspaceId tenancy gate.
  *
- * NOTE (PR1b): the "Uso del mes" card sums ai_usage_ledger directly against the
- * UTC month bucket. PR3 introduces lib/ai/cost-budget.ts (getBudgetStatus) and
- * the 80% warning flag; this card is refactored onto it then. With no ledger
- * rows yet it renders the 0 EUR empty state correctly.
+ * The "Uso del mes" card reads lib/ai/cost-budget.ts (getBudgetStatus) which
+ * sums ai_usage_ledger against the UTC month bucket (matching the ledger rollup
+ * index) and exposes the 80% warning flag. With no ledger rows it renders the
+ * 0 EUR empty state correctly.
  */
 
 export const dynamic = "force-dynamic";
@@ -137,29 +134,11 @@ export default async function AiSettingsPage() {
     }
   }
 
-  // Month usage (UTC bucket — matches the ledger rollup index expression).
-  const [usageRow] = await db
-    .select({
-      usedCents: sql<number>`coalesce(sum(${aiUsageLedger.costCents}), 0)`,
-    })
-    .from(aiUsageLedger)
-    .where(
-      and(
-        eq(aiUsageLedger.workspaceId, workspaceId),
-        sql`${aiUsageLedger.createdAt} >= date_trunc('month', timezone('UTC', now()))`,
-      ),
-    );
-
-  const [budgetRow] = await db
-    .select({ budgetCents: workspaces.aiMonthlyBudgetCents })
-    .from(workspaces)
-    .where(eq(workspaces.id, workspaceId));
-
-  const usedCents = Number(usageRow?.usedCents ?? 0);
-  const budgetCents = budgetRow?.budgetCents ?? 5000;
-  const percentUsed =
-    budgetCents > 0 ? Math.round((usedCents / budgetCents) * 100) : 0;
-  const warning = percentUsed >= 80;
+  // Month usage via the budget helper (UTC bucket matches the ledger rollup
+  // index expression). Drives the progress bar and the 80% warning surface.
+  const budget = await getBudgetStatus(db, workspaceId);
+  const { usedCents, budgetCents, warningThreshold: warning } = budget;
+  const percentUsed = Math.round(budget.percentUsed);
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-12 p-8">
@@ -211,7 +190,14 @@ export default async function AiSettingsPage() {
       </section>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium">Uso del mes</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-medium">Uso del mes</h2>
+          {warning ? (
+            <Badge variant="destructive" aria-label="Has superado el 80% del budget mensual">
+              80% budget
+            </Badge>
+          ) : null}
+        </div>
         <div className="flex flex-col gap-3 rounded-lg border p-4">
           <p className="text-sm">
             Has usado {formatEur(usedCents)} EUR de {formatEur(budgetCents)} EUR
