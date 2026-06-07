@@ -65,7 +65,7 @@ describe("ai_model_manifest seed", () => {
     expect(dupes).toEqual([]);
   });
 
-  it("seeds gemini-3.5-flash as the default for all four features", async () => {
+  it("seeds gemini-3.5-flash as the default for all five features", async () => {
     runSeed();
     const [flash] = await db
       .select({ defaults: aiModelManifest.defaultForFeatures })
@@ -75,7 +75,13 @@ describe("ai_model_manifest seed", () => {
       );
 
     expect(flash?.defaults?.sort()).toEqual(
-      ["adapt_template", "extract_document", "suggest", "summarize"].sort(),
+      [
+        "adapt_template",
+        "beautify_email",
+        "extract_document",
+        "suggest",
+        "summarize",
+      ].sort(),
     );
   });
 

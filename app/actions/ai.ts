@@ -17,9 +17,15 @@ import {
   type SuggestInput,
   type SuggestResult,
 } from "./suggest";
+import {
+  beautifyEmailWith,
+  type BeautifyEmailInput,
+  type BeautifyEmailResult,
+} from "./beautify-email";
 
 export type { SummarizeResult } from "./summarize";
 export type { SuggestResult } from "./suggest";
+export type { BeautifyEmailResult } from "./beautify-email";
 
 /**
  * Thin `"use server"` wrappers for the non-streaming AI features `summarize`
@@ -75,6 +81,26 @@ export async function suggest(input: SuggestInput): Promise<SuggestResult> {
 
   const trace = await createLangfuseTracePort();
   return suggestWith(
+    { db, getProviderClient, getManifestCost: manifestCostFor, trace },
+    workspaceId,
+    input,
+  );
+}
+
+export async function beautifyEmail(
+  input: BeautifyEmailInput,
+): Promise<BeautifyEmailResult> {
+  const workspaceId = await resolveWorkspaceId();
+  if (!workspaceId) {
+    return {
+      ok: false,
+      errorCode: "validation_error",
+      error: "Tu sesión expiró. Vuelve a iniciar sesión.",
+    };
+  }
+
+  const trace = await createLangfuseTracePort();
+  return beautifyEmailWith(
     { db, getProviderClient, getManifestCost: manifestCostFor, trace },
     workspaceId,
     input,

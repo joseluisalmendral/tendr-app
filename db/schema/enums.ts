@@ -41,6 +41,11 @@ export const aiFeature = pgEnum("ai_feature", [
   "summarize",
   "suggest",
   "extract_document",
+  // F7c PR-F7C-4a: 5th feature — generate an email-client-safe HTML email from a
+  // stored adaptation. The value is added to the live enum by a STANDALONE
+  // migration (0006) so Postgres can commit `ALTER TYPE ... ADD VALUE` outside
+  // the transaction that first uses it (plan-beautify #778).
+  "beautify_email",
 ]);
 
 export const manifestStatus = pgEnum("manifest_status", [

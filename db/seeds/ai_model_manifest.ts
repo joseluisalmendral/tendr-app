@@ -22,9 +22,9 @@ import { aiModelManifest } from "../schema/ai";
  * - DeepSeek: V4 Pro $0.435/$0.87; V4 Flash $0.14/$0.28 (both 1M ctx, text-only).
  * - Moonshot: Kimi K2.6 $0.95/$4.00 cache-miss (262K ctx, multimodal, no PDF).
  *
- * DEFAULTS (ADR-007, closed 2026-06-07): all four features
- * (adapt_template, summarize, suggest, extract_document) default to
- * `google/gemini-3.5-flash` — free-tier-first, one Google key covers the whole
+ * DEFAULTS (ADR-007, closed 2026-06-07; F7c +beautify_email): all five features
+ * (adapt_template, summarize, suggest, extract_document, beautify_email) default
+ * to `google/gemini-3.5-flash` — free-tier-first, one Google key covers the whole
  * product. extract_document relies on the F6 pdf-parse text fallback (Flash has
  * no native PDF input — accepted tradeoff). Defaults live in the per-row
  * `default_for_features` column, queried by getModelForFeature.
@@ -46,6 +46,9 @@ const ALL_FEATURES = [
   "summarize",
   "suggest",
   "extract_document",
+  // F7c PR-F7C-4a: beautify_email also defaults to gemini-3.5-flash
+  // (free-tier-first holds for the 5th feature too — ADR-007 Revisiones note).
+  "beautify_email",
 ];
 
 const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
@@ -142,7 +145,7 @@ const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
     modelId: GEMINI_FLASH,
     displayName: "Gemini 3.5 Flash",
     status: "active",
-    // ADR-007: the free-tier-first default for ALL FOUR features.
+    // ADR-007 (+F7c): the free-tier-first default for ALL FIVE features.
     defaultForFeatures: ALL_FEATURES,
     supportsMultimodal: true,
     supportsPdf: true, // PDF via document/image tokens

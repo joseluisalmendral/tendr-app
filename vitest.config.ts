@@ -28,6 +28,7 @@ export default defineConfig({
   test: {
     include: [
       "db/__tests__/**/*.test.ts",
+      "db/seeds/__tests__/**/*.test.ts",
       "app/**/__tests__/**/*.test.ts",
       "lib/**/__tests__/**/*.test.ts",
       "inngest/**/__tests__/**/*.test.ts",
