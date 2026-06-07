@@ -21,6 +21,7 @@ const WS_SCOPED_TABLES = [
   "notes",
   "documents",
   "templates",
+  "template_adaptations",
   "jobs",
   "subscriptions",
   "audit_log",

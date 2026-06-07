@@ -13,6 +13,7 @@ export * from "./workspaces";
 export * from "./crm";
 export * from "./documents";
 export * from "./templates";
+export * from "./template-adaptations";
 export * from "./jobs";
 export * from "./billing";
 export * from "./audit";
