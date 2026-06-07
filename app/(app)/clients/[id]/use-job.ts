@@ -25,7 +25,12 @@ import { useWorkspaceRealtime } from "@/lib/realtime/use-workspace-realtime";
  * failed job ALWAYS reaches a terminal view, never an indefinite spinner.
  */
 
-export type JobStatus = "pending" | "running" | "completed" | "failed";
+import { isTerminalStatus, type JobStatus } from "./job-status";
+
+// Re-exported for existing client consumers; server code must import from
+// ./job-status directly (a "use client" re-export is a client reference).
+export { isTerminalStatus };
+export type { JobStatus };
 
 /** One per-step progress entry the worker appends to `jobs.progress`. */
 export type JobProgressEntry = { step: string; at: string };
@@ -51,13 +56,6 @@ export type JobState = {
   /** The structured error (only meaningful when status==='failed'). */
   error: JobErrorResult | null;
 };
-
-const TERMINAL: ReadonlySet<JobStatus> = new Set(["completed", "failed"]);
-
-/** True once the job reached a terminal state (completed or failed). */
-export function isTerminalStatus(status: JobStatus): boolean {
-  return TERMINAL.has(status);
-}
 
 /** Status ordering so a stale event can never roll a terminal state back. */
 const STATUS_RANK: Record<JobStatus, number> = {

@@ -387,3 +387,19 @@ describe("deleteDocumentWith", () => {
       );
   });
 });
+
+describe("RSC boundary guard", () => {
+  it('imports NO value from a "use client" module (client references throw when called server-side)', async () => {
+    const { readFile } = await import("node:fs/promises");
+    const source = await readFile(
+      new URL("../delete-document.ts", import.meta.url),
+      "utf8",
+    );
+    // use-job.ts is "use client": importing a function from it into this
+    // server-invoked seam turns it into a client reference and the call
+    // throws at runtime ("Attempted to call isTerminalStatus() from the
+    // server") while build/tests stay green. Shared logic must come from
+    // the directive-free ./job-status module instead.
+    expect(source).not.toMatch(/from\s+["']\.\/use-job["']/);
+  });
+});
