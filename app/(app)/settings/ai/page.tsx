@@ -21,7 +21,7 @@ import { ProviderCard, type ProviderId } from "./provider-card";
 /**
  * /settings/ai — single vertical view (no tabs) with three sections:
  *   1. Providers (5 BYO-key cards).
- *   2. Modelo por feature (4 rows of model Selects).
+ *   2. Modelo por feature (5 rows of model Selects).
  *   3. Uso del mes (month cost vs budget).
  *
  * Server Component. Provider reads use ONLY allowlisted, non-secret columns
@@ -73,6 +73,9 @@ const FEATURES: {
     label: "Extraer documento",
     requirements: { requiresPdfOrFallback: true },
   },
+  // F7c PR-F7C-4b: 5th feature. Plain text in / structured HTML out via
+  // generateObject — no streaming and no PDF requirement.
+  { id: "beautify_email", label: "Embellecer email", requirements: {} },
 ];
 
 export default async function AiSettingsPage() {
@@ -113,6 +116,7 @@ export default async function AiSettingsPage() {
     summarize: {},
     suggest: {},
     extract_document: {},
+    beautify_email: {},
   };
 
   for (const feature of FEATURES) {
