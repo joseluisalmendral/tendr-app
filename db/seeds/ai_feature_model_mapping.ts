@@ -12,7 +12,7 @@ import { aiFeatureModelMapping, workspaces } from "../schema";
  *
  * The extractor routes through ai_feature_model_mapping -> ai_model_manifest
  * (composite (provider, model_id) FK). F6 ships document extraction on Google
- * Gemini 3.5 Flash, which the manifest marks supports_pdf=true (db/seeds/
+ * Gemini 2.5 Flash, which the manifest marks supports_pdf=true (db/seeds/
  * ai_model_manifest.ts), so the native-PDF path is exercised end to end.
  *
  * The (provider, model_id) pair MUST match a manifest row exactly or the
@@ -25,7 +25,7 @@ import { aiFeatureModelMapping, workspaces } from "../schema";
  * seed a single tenant without the full-table runner below.
  */
 export const EXTRACT_DOCUMENT_PROVIDER = "google" as const;
-export const EXTRACT_DOCUMENT_MODEL_ID = "gemini-3.5-flash" as const;
+export const EXTRACT_DOCUMENT_MODEL_ID = "gemini-2.5-flash" as const;
 
 /**
  * Upserts the `extract_document` mapping for one workspace. Idempotent on the
