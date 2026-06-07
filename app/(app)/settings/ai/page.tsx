@@ -3,14 +3,21 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   aiFeatureModelMapping,
-  aiModelManifest,
   aiProviderConfigs,
   aiUsageLedger,
   workspaces,
 } from "@/db/schema";
 import { getCurrentWorkspace } from "@/lib/auth/get-current-workspace";
+import {
+  getAvailableModels,
+  type FeatureRequirements,
+} from "@/lib/ai/manifest";
 
-import { FeatureModelRow, type ManifestModel } from "./feature-model-row";
+import {
+  FeatureModelRow,
+  type FeatureId,
+  type FeatureModelOption,
+} from "./feature-model-row";
 import { ProviderCard, type ProviderId } from "./provider-card";
 
 /**
@@ -40,14 +47,33 @@ const PROVIDERS: { id: ProviderId; label: string }[] = [
   { id: "moonshot", label: "Kimi (Moonshot)" },
 ];
 
+/**
+ * Per-feature model capability requirements (design §8/§9). adapt_template and
+ * summarize stream, so non-streaming models are ineligible. extract_document
+ * prefers native PDF but the F6 pdf-parse fallback covers non-PDF models, so PDF
+ * is a SOFT requirement (never an ineligibility reason). suggest is plain text.
+ */
 const FEATURES: {
-  id: "adapt_template" | "summarize" | "suggest" | "extract_document";
+  id: FeatureId;
   label: string;
+  requirements: FeatureRequirements;
 }[] = [
-  { id: "adapt_template", label: "Adaptar plantilla" },
-  { id: "summarize", label: "Resumir relación" },
-  { id: "suggest", label: "Sugerir acción" },
-  { id: "extract_document", label: "Extraer documento" },
+  {
+    id: "adapt_template",
+    label: "Adaptar plantilla",
+    requirements: { requiresStreaming: true },
+  },
+  {
+    id: "summarize",
+    label: "Resumir relación",
+    requirements: { requiresStreaming: true },
+  },
+  { id: "suggest", label: "Sugerir acción", requirements: {} },
+  {
+    id: "extract_document",
+    label: "Extraer documento",
+    requirements: { requiresPdfOrFallback: true },
+  },
 ];
 
 function formatEur(cents: number): string {
@@ -78,19 +104,38 @@ export default async function AiSettingsPage() {
     .from(aiFeatureModelMapping)
     .where(eq(aiFeatureModelMapping.workspaceId, workspaceId));
 
-  // Manifest is public-read; only non-deprecated models are selectable.
-  const manifest: ManifestModel[] = await db
-    .select({
-      provider: aiModelManifest.provider,
-      modelId: aiModelManifest.modelId,
-      displayName: aiModelManifest.displayName,
-      supportsPdf: aiModelManifest.supportsPdf,
-      supportsStreaming: aiModelManifest.supportsStreaming,
-    })
-    .from(aiModelManifest)
-    .where(
-      sql`${aiModelManifest.deprecatedAt} is null and ${aiModelManifest.status} = 'active'`,
-    );
+  const configuredProviders = configs.map((c) => c.provider as ProviderId);
+
+  // Resolve selectable models per feature via getAvailableModels (PR2): the
+  // helper filters active/non-deprecated and flags eligibility per the feature's
+  // requirements. We group the options per configured provider so each row's
+  // Select renders exactly what the workspace can choose, ineligible disabled.
+  const featureOptions: Record<
+    FeatureId,
+    Record<string, FeatureModelOption[]>
+  > = {
+    adapt_template: {},
+    summarize: {},
+    suggest: {},
+    extract_document: {},
+  };
+
+  for (const feature of FEATURES) {
+    for (const provider of configuredProviders) {
+      const models = await getAvailableModels(
+        db,
+        provider,
+        feature.requirements,
+      );
+      featureOptions[feature.id][provider] = models.map((m) => ({
+        provider,
+        modelId: m.modelId,
+        displayName: m.displayName,
+        eligible: m.eligible,
+        ineligibleReason: m.ineligibleReason,
+      }));
+    }
+  }
 
   // Month usage (UTC bucket — matches the ledger rollup index expression).
   const [usageRow] = await db
@@ -115,7 +160,6 @@ export default async function AiSettingsPage() {
   const percentUsed =
     budgetCents > 0 ? Math.round((usedCents / budgetCents) * 100) : 0;
   const warning = percentUsed >= 80;
-  const configuredProviders = configs.map((c) => c.provider as ProviderId);
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-12 p-8">
@@ -156,7 +200,7 @@ export default async function AiSettingsPage() {
                 key={f.id}
                 feature={f.id}
                 label={f.label}
-                manifest={manifest}
+                options={featureOptions[f.id]}
                 configuredProviders={configuredProviders}
                 currentProvider={mapping?.provider ?? null}
                 currentModelId={mapping?.modelId ?? null}

@@ -1,62 +1,80 @@
-import { sql } from "drizzle-orm";
+import { and, eq, isNull, notInArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import { aiModelManifest } from "../schema/ai";
 
 /**
- * Seeds the curated ai_model_manifest with the active models Tendr ships with.
+ * Seeds the curated ai_model_manifest with the 10 active models Tendr ships
+ * with across the 5 supported providers (F7 Block B).
  *
- * Pricing and capabilities verified June 2026 against official provider docs
- * and current pricing aggregators (NOT model training data):
- * - OpenAI: GPT-5.5 $5/$30 per 1M (1.05M ctx); GPT-5.4 mini $0.75/$4.50 (400K ctx).
- * - Anthropic: Opus 4.8 $5/$25 (1M ctx); Haiku 4.5 $1/$5 (200K ctx).
- * - Google: Gemini 3.1 Pro $2/$12 <=200K prompt tier (2M ctx, $4/$18 above 200K);
- *   Gemini 3.5 Flash $1.50/$9 flat; Gemini 3.1 Flash-Lite $0.25/$1.50 flat;
- *   Gemini 2.5 Flash $0.30/$2.50; 2.5 Flash-Lite $0.10/$0.40
- *   (2.0 family was shut down 2026-06-01).
- * - DeepSeek: V4 Pro $1.74/$3.48; V4 Flash $0.14/$0.28 (both 1M ctx, text-only).
- * - Moonshot: Kimi K2.6 $0.95/$4.00 cache-miss (256K ctx, multimodal).
+ * Pricing, model ids and capabilities VERIFIED June 2026 against official
+ * provider docs + current pricing aggregators (NOT model training data) and
+ * captured in the F7 manifest-research artifact. Per-1K = per-1M / 1000.
+ *
+ * - OpenAI: GPT-5.5 $5/$30 per 1M (1.05M ctx); GPT-5.4 mini $0.75/$4.50 (1.1M ctx).
+ * - Anthropic: Opus 4.8 $5/$25 (1M ctx); Sonnet 4.6 $3/$15 (1M ctx);
+ *   Haiku 4.5 $1/$5 (200K ctx).
+ * - Google: Gemini 3.1 Pro (preview) $2/$12 <=200K prompt tier (1M ctx);
+ *   Gemini 3.5 Flash $1.50/$9 (~1M ctx) — the free-tier-first DEFAULT per ADR-007.
+ * - DeepSeek: V4 Pro $0.435/$0.87; V4 Flash $0.14/$0.28 (both 1M ctx, text-only).
+ * - Moonshot: Kimi K2.6 $0.95/$4.00 cache-miss (262K ctx, multimodal, no PDF).
+ *
+ * DEFAULTS (ADR-007, closed 2026-06-07): all four features
+ * (adapt_template, summarize, suggest, extract_document) default to
+ * `google/gemini-3.5-flash` — free-tier-first, one Google key covers the whole
+ * product. extract_document relies on the F6 pdf-parse text fallback (Flash has
+ * no native PDF input — accepted tradeoff). Defaults live in the per-row
+ * `default_for_features` column, queried by getModelForFeature.
+ *
+ * Capabilities flagged [UNVERIFIED] in research are recorded CONSERVATIVELY as
+ * false (GPT-5.4 mini native PDF; DeepSeek multimodal/PDF; Kimi native PDF).
  *
  * Runs with a PRIVILEGED connection (DATABASE_URL): the manifest is
  * RLS-public-read but write-only via service_role; seeding bypasses RLS.
- * default_for_features marks the model new workspaces inherit per feature (G2).
  *
  * Idempotent: onConflictDoUpdate on the (provider, model_id) PK so re-running
- * refreshes rows instead of failing.
+ * refreshes rows in place instead of failing or duplicating. Models no longer
+ * in this list are DEPRECATED (status='deprecated' + deprecated_at) rather than
+ * deleted, preserving the ai_feature_model_mapping composite FK.
  */
+const GEMINI_FLASH = "gemini-3.5-flash";
+const ALL_FEATURES = [
+  "adapt_template",
+  "summarize",
+  "suggest",
+  "extract_document",
+];
+
 const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
   // ── OpenAI ────────────────────────────────────────────────────────────────
-  {
-    provider: "openai",
-    modelId: "gpt-5.4-mini",
-    displayName: "GPT-5.4 mini",
-    status: "active",
-    // Cheap default for the three text features; new workspaces inherit it.
-    defaultForFeatures: ["adapt_template", "summarize", "suggest"],
-    supportsMultimodal: true,
-    supportsPdf: false, // image input confirmed; native PDF input not confirmed
-    supportsImage: true,
-    supportsStreaming: true,
-    maxInputTokens: 400000,
-    costPer1kInput: "0.000750",
-    costPer1kOutput: "0.004500",
-  },
   {
     provider: "openai",
     modelId: "gpt-5.5",
     displayName: "GPT-5.5",
     status: "active",
-    // Document extraction needs native PDF input; same provider as the text
-    // defaults so a new workspace only needs one API key.
-    defaultForFeatures: ["extract_document"],
+    defaultForFeatures: [],
     supportsMultimodal: true,
-    supportsPdf: true,
+    supportsPdf: true, // native file/PDF input (file search) confirmed
     supportsImage: true,
     supportsStreaming: true,
     maxInputTokens: 1050000,
     costPer1kInput: "0.005000",
     costPer1kOutput: "0.030000",
+  },
+  {
+    provider: "openai",
+    modelId: "gpt-5.4-mini",
+    displayName: "GPT-5.4 mini",
+    status: "active",
+    defaultForFeatures: [],
+    supportsMultimodal: true,
+    supportsPdf: false, // vision confirmed; native PDF input UNVERIFIED -> false
+    supportsImage: true,
+    supportsStreaming: true,
+    maxInputTokens: 1100000,
+    costPer1kInput: "0.000750",
+    costPer1kOutput: "0.004500",
   },
   // ── Anthropic ─────────────────────────────────────────────────────────────
   {
@@ -75,6 +93,20 @@ const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
   },
   {
     provider: "anthropic",
+    modelId: "claude-sonnet-4-6",
+    displayName: "Claude Sonnet 4.6",
+    status: "active",
+    defaultForFeatures: [],
+    supportsMultimodal: true,
+    supportsPdf: true,
+    supportsImage: true,
+    supportsStreaming: true,
+    maxInputTokens: 1000000,
+    costPer1kInput: "0.003000",
+    costPer1kOutput: "0.015000",
+  },
+  {
+    provider: "anthropic",
     modelId: "claude-haiku-4-5",
     displayName: "Claude Haiku 4.5",
     status: "active",
@@ -90,7 +122,7 @@ const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
   // ── Google ────────────────────────────────────────────────────────────────
   {
     provider: "google",
-    modelId: "gemini-3.1-pro",
+    modelId: "gemini-3.1-pro-preview",
     displayName: "Gemini 3.1 Pro",
     status: "active",
     defaultForFeatures: [],
@@ -98,66 +130,25 @@ const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
     supportsPdf: true,
     supportsImage: true,
     supportsStreaming: true,
-    maxInputTokens: 2000000,
+    maxInputTokens: 1000000,
     // <=200K prompt tier; prompts above 200K are billed $4/$18 per 1M.
     costPer1kInput: "0.002000",
     costPer1kOutput: "0.012000",
   },
   {
     provider: "google",
-    modelId: "gemini-3.5-flash",
+    modelId: GEMINI_FLASH,
     displayName: "Gemini 3.5 Flash",
     status: "active",
-    defaultForFeatures: [],
+    // ADR-007: the free-tier-first default for ALL FOUR features.
+    defaultForFeatures: ALL_FEATURES,
     supportsMultimodal: true,
-    supportsPdf: true,
+    supportsPdf: true, // PDF via document/image tokens
     supportsImage: true,
     supportsStreaming: true,
     maxInputTokens: 1048576,
     costPer1kInput: "0.001500",
     costPer1kOutput: "0.009000",
-  },
-  {
-    provider: "google",
-    modelId: "gemini-3.1-flash-lite",
-    displayName: "Gemini 3.1 Flash-Lite",
-    status: "active",
-    defaultForFeatures: [],
-    supportsMultimodal: true,
-    supportsPdf: true,
-    supportsImage: true,
-    supportsStreaming: true,
-    maxInputTokens: 1048576,
-    costPer1kInput: "0.000250",
-    costPer1kOutput: "0.001500",
-  },
-  {
-    provider: "google",
-    modelId: "gemini-2.5-flash",
-    displayName: "Gemini 2.5 Flash",
-    status: "active",
-    defaultForFeatures: [],
-    supportsMultimodal: true,
-    supportsPdf: true,
-    supportsImage: true,
-    supportsStreaming: true,
-    maxInputTokens: 1048576,
-    costPer1kInput: "0.000300",
-    costPer1kOutput: "0.002500",
-  },
-  {
-    provider: "google",
-    modelId: "gemini-2.5-flash-lite",
-    displayName: "Gemini 2.5 Flash-Lite",
-    status: "active",
-    defaultForFeatures: [],
-    supportsMultimodal: true,
-    supportsPdf: true,
-    supportsImage: true,
-    supportsStreaming: true,
-    maxInputTokens: 1048576,
-    costPer1kInput: "0.000100",
-    costPer1kOutput: "0.000400",
   },
   // ── DeepSeek ──────────────────────────────────────────────────────────────
   {
@@ -166,13 +157,14 @@ const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
     displayName: "DeepSeek V4 Pro",
     status: "active",
     defaultForFeatures: [],
-    supportsMultimodal: false,
+    supportsMultimodal: false, // docs silent -> treat as text-only (UNVERIFIED)
     supportsPdf: false,
     supportsImage: false,
     supportsStreaming: true,
     maxInputTokens: 1000000,
-    costPer1kInput: "0.001740",
-    costPer1kOutput: "0.003480",
+    // Official 75% rate after 2026-05-31: $0.435/M cache-miss in, $0.87/M out.
+    costPer1kInput: "0.000435",
+    costPer1kOutput: "0.000870",
   },
   {
     provider: "deepseek",
@@ -196,7 +188,7 @@ const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
     status: "active",
     defaultForFeatures: [],
     supportsMultimodal: true,
-    supportsPdf: false, // image/video input confirmed; native PDF not confirmed
+    supportsPdf: false, // image/video input confirmed; native PDF UNVERIFIED -> false
     supportsImage: true,
     supportsStreaming: true,
     maxInputTokens: 262144,
@@ -221,6 +213,7 @@ async function main() {
     .onConflictDoUpdate({
       target: [aiModelManifest.provider, aiModelManifest.modelId],
       // Refresh mutable fields from the incoming row (EXCLUDED) on conflict.
+      // Re-activate a previously deprecated model that returns to the list.
       set: {
         displayName: sql`excluded.display_name`,
         status: sql`excluded.status`,
@@ -232,17 +225,46 @@ async function main() {
         supportsPdf: sql`excluded.supports_pdf`,
         supportsImage: sql`excluded.supports_image`,
         supportsStreaming: sql`excluded.supports_streaming`,
+        deprecatedAt: sql`null`,
         updatedAt: sql`now()`,
       },
     });
 
+  // Deprecate any active row NOT in the curated list (stale prior-seed models).
+  // We deprecate rather than delete so the ai_feature_model_mapping composite FK
+  // never dangles; deprecated models are filtered out by the routing helpers.
+  const keep = MODELS.map((m) => `${m.provider}:${m.modelId}`);
+  const deprecated = await db
+    .update(aiModelManifest)
+    .set({
+      status: "deprecated",
+      deprecatedAt: sql`now()`,
+      updatedAt: sql`now()`,
+    })
+    .where(
+      and(
+        isNull(aiModelManifest.deprecatedAt),
+        notInArray(
+          sql`${aiModelManifest.provider} || ':' || ${aiModelManifest.modelId}`,
+          keep,
+        ),
+      ),
+    )
+    .returning({
+      provider: aiModelManifest.provider,
+      modelId: aiModelManifest.modelId,
+    });
+
   await client.end();
+  return deprecated.length;
 }
 
 main()
-  .then(() => {
+  .then((deprecatedCount) => {
     // eslint-disable-next-line no-console
-    console.log(`Seeded ${MODELS.length} manifest models.`);
+    console.log(
+      `Seeded ${MODELS.length} active manifest models; deprecated ${deprecatedCount} stale model(s).`,
+    );
     process.exit(0);
   })
   .catch((error) => {

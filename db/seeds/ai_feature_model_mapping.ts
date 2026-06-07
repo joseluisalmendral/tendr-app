@@ -25,7 +25,7 @@ import { aiFeatureModelMapping, workspaces } from "../schema";
  * seed a single tenant without the full-table runner below.
  */
 export const EXTRACT_DOCUMENT_PROVIDER = "google" as const;
-export const EXTRACT_DOCUMENT_MODEL_ID = "gemini-2.5-flash" as const;
+export const EXTRACT_DOCUMENT_MODEL_ID = "gemini-3.5-flash" as const;
 
 /**
  * Upserts the `extract_document` mapping for one workspace. Idempotent on the
