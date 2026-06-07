@@ -28,6 +28,6 @@
 
 alter table "ai_usage_ledger" add column "cost_microcents" bigint;--> statement-breakpoint
 
-update "ai_usage_ledger" set "cost_microcents" = "cost_cents" * 10000 where "cost_microcents" is null;--> statement-breakpoint
+update "ai_usage_ledger" set "cost_microcents" = "cost_cents"::bigint * 10000 where "cost_microcents" is null;--> statement-breakpoint
 
 alter table "ai_usage_ledger" alter column "cost_microcents" set not null;
