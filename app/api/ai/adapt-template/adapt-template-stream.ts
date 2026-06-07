@@ -33,6 +33,15 @@ import {
 import type { ProviderClient } from "@/lib/ai/get-provider-client";
 import type { TracePort } from "@/lib/ai/trace";
 
+import { EXTRA_INSTRUCTIONS_MAX } from "@/app/(app)/templates/template-limits";
+
+// Re-exported so existing importers (and tests) of this seam keep a single,
+// stable source for the bound. The canonical definition now lives in the
+// client-safe template-limits module so the adapt dialog can import it without
+// pulling this server seam graph into the browser bundle (F7 PR4b bundle-leak
+// class).
+export { EXTRA_INSTRUCTIONS_MAX };
+
 /**
  * Pure, import-testable seam for the `adaptTemplate` STREAMING feature (F7 Block
  * C / PR4a). The streaming Route Handler is the thin wrapper; this seam holds
@@ -63,10 +72,6 @@ import type { TracePort } from "@/lib/ai/trace";
  */
 
 const FEATURE = "adapt_template" as const;
-
-/** Max free-text steering the user may add. Bounded so it cannot blow up the
- *  prompt (or the persisted row). 2000 chars is generous for a few sentences. */
-export const EXTRA_INSTRUCTIONS_MAX = 2000;
 
 /** Cases considered "active" for personalization context — the open pipeline
  *  stages, NOT closed_won / closed_lost. */
