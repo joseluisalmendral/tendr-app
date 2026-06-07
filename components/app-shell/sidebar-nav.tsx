@@ -7,6 +7,7 @@ import {
   HouseIcon,
   UsersIcon,
   KanbanIcon,
+  FileTextIcon,
   GearIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -23,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/app", label: "Inicio", icon: HouseIcon },
   { href: "/clients", label: "Clientes", icon: UsersIcon },
   { href: "/kanban", label: "Kanban", icon: KanbanIcon },
+  { href: "/templates", label: "Plantillas", icon: FileTextIcon },
   { href: "/settings/ai", label: "Ajustes", icon: GearIcon },
 ];
 
