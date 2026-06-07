@@ -76,6 +76,12 @@ Todas verificadas el 2026-06-06.
 - ADR-001 (docs/decisions/ADR-001-architecture.md), capas observabilidad y jobs.
 - ADR-004 futuro (BYO key envelope, F7).
 
+## Revisiones
+
+### 2026-06-07 · Migración a AI SDK v6 consumada
+
+El criterio de reapertura "release estable de AI SDK v6" se disparó: la v6 es estable y el repo ejecuta `ai@^6.0.197` (junto a `@ai-sdk/*` v2/v3). Decisión: **permanecer en la línea v6** como única capa de acceso a LLMs. F7 consume la superficie v6 verificada en este ciclo: `streamText` con `toTextStreamResponse()` y `onFinish({ usage })` para el ledger de costes, `generateText` para `summarize`/`suggest`, y Kimi/Moonshot vía provider OpenAI-compatible (`createOpenAI` con `baseURL: https://api.moonshot.ai/v1`), confirmando el contrato previsto en la decisión original. El resto del ADR permanece vigente.
+
 ---
 
-*ADR-003. Última revisión: 2026-06-06.*
+*ADR-003. Última revisión: 2026-06-07.*
