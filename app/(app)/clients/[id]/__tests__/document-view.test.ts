@@ -5,6 +5,7 @@ import {
   deriveSteps,
   errorMessageFor,
   EXTRACTION_STEPS,
+  isTerminalExtractionError,
   resolveDocumentView,
   shouldAutoExpand,
 } from "../document-view";
@@ -172,5 +173,28 @@ describe("asExtractionResult — defensive narrowing", () => {
     expect(asExtractionResult({})).toBeNull();
     expect(asExtractionResult({ resumen: "x" })).toBeNull();
     expect(asExtractionResult("not an object")).toBeNull();
+  });
+});
+
+describe("isTerminalExtractionError", () => {
+  it("flags no_key_configured and budget_exceeded as terminal", () => {
+    expect(isTerminalExtractionError("no_key_configured")).toBe(true);
+    expect(isTerminalExtractionError("budget_exceeded")).toBe(true);
+  });
+
+  it("treats transient/unknown codes and null as non-terminal (retry may help)", () => {
+    expect(isTerminalExtractionError("provider_error")).toBe(false);
+    expect(isTerminalExtractionError("document_error")).toBe(false);
+    expect(isTerminalExtractionError(null)).toBe(false);
+    expect(isTerminalExtractionError(undefined)).toBe(false);
+  });
+
+  it("gives an actionable message for the new terminal codes", () => {
+    expect(errorMessageFor({ error_code: "no_key_configured" })).toMatch(
+      /settings\/ai/,
+    );
+    expect(errorMessageFor({ error_code: "budget_exceeded" })).toMatch(
+      /presupuesto/i,
+    );
   });
 });

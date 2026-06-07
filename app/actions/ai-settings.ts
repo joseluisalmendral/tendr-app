@@ -9,6 +9,18 @@ import {
   type SaveProviderKeyResult,
 } from "@/app/(app)/settings/ai/save-provider-key";
 import {
+  clearFeatureModelWith,
+  clearFeatureModelSchema,
+  type ClearFeatureModelInput,
+  type ClearFeatureModelResult,
+} from "@/app/(app)/settings/ai/clear-feature-model";
+import {
+  deleteProviderKeyWith,
+  deleteProviderKeySchema,
+  type DeleteProviderKeyInput,
+  type DeleteProviderKeyResult,
+} from "@/app/(app)/settings/ai/delete-provider-key";
+import {
   setFeatureModelWith,
   type SetFeatureModelInput,
   type SetFeatureModelResult,
@@ -21,6 +33,8 @@ import { validateProviderKey } from "@/lib/ai/validate-provider-key";
 
 export type { SaveProviderKeyResult } from "@/app/(app)/settings/ai/save-provider-key";
 export type { SetFeatureModelResult } from "@/app/(app)/settings/ai/set-feature-model";
+export type { DeleteProviderKeyResult } from "@/app/(app)/settings/ai/delete-provider-key";
+export type { ClearFeatureModelResult } from "@/app/(app)/settings/ai/clear-feature-model";
 
 /**
  * Thin `"use server"` wrappers for the /settings/ai key + feature-model actions.
@@ -83,6 +97,73 @@ export async function saveProviderKey(
 
   const result = await saveProviderKeyWith(
     { serviceDb, validateProviderKey, encryptProviderKey },
+    resolved.workspaceId,
+    parsed.data,
+    resolved.actorId,
+  );
+
+  if (result.ok) {
+    revalidatePath("/settings/ai");
+  }
+
+  return result;
+}
+
+/**
+ * Revokes (deletes) the configured BYO key for a provider. NO secret crosses
+ * this boundary — only the provider id travels (a plain string argument is
+ * safe to log; it carries no key bytes). After a successful revoke the provider
+ * card returns to "No configurado"; feature mappings still pointing at that
+ * provider will fail with NO_KEY_CONFIGURED at use time, by design (taxonomy).
+ */
+export async function deleteProviderKey(
+  input: DeleteProviderKeyInput,
+): Promise<DeleteProviderKeyResult> {
+  const resolved = await resolveWorkspaceActor();
+  if (!resolved) {
+    return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  }
+
+  // Belt-and-braces shape check (the seam re-validates defensively).
+  const parsed = deleteProviderKeySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "No hay key configurada para ese provider." };
+  }
+
+  const result = await deleteProviderKeyWith(
+    { serviceDb },
+    resolved.workspaceId,
+    parsed.data,
+    resolved.actorId,
+  );
+
+  if (result.ok) {
+    revalidatePath("/settings/ai");
+  }
+
+  return result;
+}
+
+/**
+ * Clears a feature's model override so it falls back to the manifest default
+ * (gemini-3.5-flash). Backs the "Default" option in each feature Select
+ * (decision #775 finding 4a). No-op safe when no override exists.
+ */
+export async function clearFeatureModel(
+  input: ClearFeatureModelInput,
+): Promise<ClearFeatureModelResult> {
+  const resolved = await resolveWorkspaceActor();
+  if (!resolved) {
+    return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  }
+
+  const parsed = clearFeatureModelSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Selección inválida." };
+  }
+
+  const result = await clearFeatureModelWith(
+    { db, serviceDb },
     resolved.workspaceId,
     parsed.data,
     resolved.actorId,

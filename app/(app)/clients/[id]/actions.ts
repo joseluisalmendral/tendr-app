@@ -18,6 +18,10 @@ import {
   type DeleteDocumentResult,
 } from "./delete-document";
 import {
+  retryExtractionWith,
+  type RetryExtractionResult,
+} from "./retry-extraction";
+import {
   getDocumentSignedUrlWith,
   uploadDocumentWith,
   type UploadDocumentResult,
@@ -26,6 +30,7 @@ import {
 export type { CreateCaseState } from "./create-case";
 export type { CreateNoteState } from "./create-note";
 export type { DeleteDocumentResult } from "./delete-document";
+export type { RetryExtractionResult } from "./retry-extraction";
 export type { UploadDocumentResult } from "./upload-document";
 
 /**
@@ -194,6 +199,35 @@ export async function deleteDocument(input: {
   const result = await deleteDocumentWith(
     { supabase, db },
     { workspaceId, documentId: input.documentId },
+  );
+
+  if (result.ok) {
+    revalidatePath(`/clients/${input.clientId}`);
+  }
+
+  return result;
+}
+
+/**
+ * Server Action: retries a FAILED document extraction. Resets the job to
+ * `pending` (via the privileged service_role connection — jobs UPDATE is
+ * service_role-only) and re-enqueues the Inngest worker, which re-runs its gates
+ * from the top. Terminal causes (no_key_configured/budget_exceeded) re-fail
+ * cleanly with the curated message (no infinite burn). Tenancy is owned by the
+ * resolved workspace scope inside the seam; `clientId` only drives revalidation.
+ */
+export async function retryExtraction(input: {
+  jobId: string;
+  clientId: string;
+}): Promise<RetryExtractionResult> {
+  const workspaceId = await resolveWorkspaceId();
+  if (!workspaceId) {
+    return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  }
+
+  const result = await retryExtractionWith(
+    { db: serviceDb, inngest },
+    { workspaceId, jobId: input.jobId },
   );
 
   if (result.ok) {
