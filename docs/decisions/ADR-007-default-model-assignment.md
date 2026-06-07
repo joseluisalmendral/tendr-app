@@ -14,7 +14,7 @@ Aceptada
 
 ## Contexto
 
-Cada feature IA de Tendr (`adapt_template`, `summarize`, `suggest`, `extract_document`) necesita un modelo por defecto que los workspaces nuevos heredan sin configurar nada. El default vive en el seed del manifest (`db/seeds/ai_model_manifest.ts`, campo `default_for_features`) y `getModelForFeature` cae a él cuando el workspace no tiene override en `ai_feature_model_mapping`.
+Cada feature IA de Tendr (`adapt_template`, `summarize`, `suggest`, `extract_document`; en F7c se añade `beautify_email` — ver Revisiones) necesita un modelo por defecto que los workspaces nuevos heredan sin configurar nada. El default vive en el seed del manifest (`db/seeds/ai_model_manifest.ts`, campo `default_for_features`) y `getModelForFeature` cae a él cuando el workspace no tiene override en `ai_feature_model_mapping`.
 
 Restricción de producto decidida durante este ciclo: **el producto debe poder operar de extremo a extremo con la capa gratuita de la API de Gemini, sin tarjeta de crédito**. Desde abril/mayo de 2026 el free tier de Google cubre únicamente la familia Flash/Flash-Lite (Gemini 3.x Flash: 10 RPM, 250K TPM, ~1.500 req/día, contexto 1M); los modelos Pro pasaron a facturación. El resto de providers del manifest (OpenAI, Anthropic, DeepSeek, Moonshot) no ofrecen free tier de API equiparable.
 
@@ -59,6 +59,14 @@ Reabrir este ADR en F10 (o antes) si se cumple **cualquiera** de los tres umbral
 1. **Coste teórico**: coste medio por workspace/mes en `ai_usage_ledger` > **€3** (lo que se pagaría si se facturara: el uso ya justificaría evaluar un modelo de pago).
 2. **Techo del free tier**: > **5%** de las llamadas IA de una semana terminan en `RATE_LIMIT` (error curado, filtrable en Langfuse por `metadata.feature`).
 3. **Calidad/latencia en Langfuse**: `extract_document` con campos vacíos o erróneos en > **10%** de los traces, o p95 de time-to-first-token de `adapt_template` > **5s**.
+
+## Revisiones
+
+### 2026-06-07 · 5.ª feature `beautify_email` (F7c PR-F7C-4)
+
+Se añade `beautify_email` como quinta feature IA (decision Engram #777): transforma el texto de una adaptación ya generada en un email HTML seguro para clientes de correo, vía `generateObject` (no streaming) con paleta curada. **El default sigue siendo `google / gemini-3.5-flash`** — el criterio "free-tier-first" se mantiene sin cambios: una sola key gratuita de Google cubre ahora las CINCO features. La feature impone requisitos de capability vacíos (`{}`) en el model picker (entra texto plano, sale HTML estructurado: ni streaming ni PDF), por lo que cualquier modelo del manifest es elegible para el override per-feature.
+
+Esto NO altera la decisión ni los tradeoffs originales (sigue siendo Flash por defecto, override per-feature disponible). El coste de `beautify_email` se registra en `ai_usage_ledger` con su propio `feature='beautify_email'` (cost_microcents + legacy cost_cents) y es medible por separado en Langfuse (`metadata.feature`), de modo que alimenta los mismos umbrales del criterio de revisión de F10.
 
 ## Referencias
 
