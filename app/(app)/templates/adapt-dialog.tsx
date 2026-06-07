@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   useTransition,
@@ -495,6 +496,14 @@ function CopyButton({
 }) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear the "copied" reset timer on unmount so it can't fire after the
+  // button is gone (no setState-after-unmount).
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   async function handleCopy() {
     try {
