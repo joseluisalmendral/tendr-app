@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { ensureAnonymousWorkspace } from "@/app/(auth)/actions";
 import {
   saveProviderKeyWith,
-  type SaveProviderKeyInput,
+  saveProviderKeySchema,
   type SaveProviderKeyResult,
 } from "@/app/(app)/settings/ai/save-provider-key";
 import {
@@ -32,6 +32,14 @@ export type { SetFeatureModelResult } from "@/app/(app)/settings/ai/set-feature-
  * SECRETS HARD-STOP: the plaintext key only crosses this boundary once (from the
  * client form to `saveProviderKeyWith`); it is encrypted + discarded inside the
  * seam and NEVER returned, logged, or revalidated back to the client.
+ *
+ * DEV-LOGGER HARDENING: `saveProviderKey` takes the key as a `FormData` field
+ * (NOT a typed object argument). Next.js 16's `next dev` Server Action logger
+ * prints positional action arguments to stdout; a plain `{ key }` argument would
+ * echo the plaintext once (dev only, never in `next build`/`next start`). A
+ * `FormData` instance logs as an opaque object, so the literal key never reaches
+ * that logger. The pure seam (`saveProviderKeyWith`) keeps its typed signature —
+ * only this `"use server"` wrapper boundary changed.
  */
 
 /**
@@ -55,17 +63,28 @@ async function resolveWorkspaceActor(): Promise<{
 }
 
 export async function saveProviderKey(
-  input: SaveProviderKeyInput,
+  formData: FormData,
 ): Promise<SaveProviderKeyResult> {
   const resolved = await resolveWorkspaceActor();
   if (!resolved) {
     return { ok: false, error: "Key inválida" };
   }
 
+  // Validate the FormData shape here (same provider enum + key length bounds as
+  // the seam). The seam re-validates defensively, so this is belt-and-braces;
+  // either rejection returns the detail-free message.
+  const parsed = saveProviderKeySchema.safeParse({
+    provider: formData.get("provider"),
+    key: formData.get("key"),
+  });
+  if (!parsed.success) {
+    return { ok: false, error: "Key inválida" };
+  }
+
   const result = await saveProviderKeyWith(
     { serviceDb, validateProviderKey, encryptProviderKey },
     resolved.workspaceId,
-    input,
+    parsed.data,
     resolved.actorId,
   );
 

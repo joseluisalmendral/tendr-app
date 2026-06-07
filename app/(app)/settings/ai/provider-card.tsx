@@ -43,6 +43,12 @@ export type ProviderId =
  * action call. On success the input is cleared, the dialog closes, and the view
  * refreshes (router.refresh) so the new "Configurado" badge + timestamps come
  * straight from the authoritative server read — the key is never echoed back.
+ *
+ * DEV-LOGGER HARDENING: the key is submitted as a `FormData` field, not as a
+ * plain Server Action object argument. Next.js 16's `next dev` action logger
+ * prints positional arguments to stdout; a `FormData` instance logs as an opaque
+ * object, so the plaintext key never reaches that dev logger (dev only — prod
+ * `next start` does not log action args at all).
  */
 export function ProviderCard({
   provider,
@@ -67,7 +73,13 @@ export function ProviderCard({
     event.preventDefault();
     setError(null);
     startTransition(async () => {
-      const result = await saveProviderKey({ provider, key });
+      // Submit via FormData so the plaintext key never becomes a plain Server
+      // Action argument (Next.js 16 dev logger echoes positional args; FormData
+      // logs as an opaque object).
+      const formData = new FormData();
+      formData.set("provider", provider);
+      formData.set("key", key);
+      const result = await saveProviderKey(formData);
       if (result.ok) {
         setKey("");
         setOpen(false);
