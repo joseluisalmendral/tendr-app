@@ -24,12 +24,17 @@ export type FeatureId =
   | "suggest"
   | "extract_document";
 
-export type ManifestModel = {
-  provider: string;
+/**
+ * A manifest model already resolved for a feature by `getAvailableModels`
+ * (lib/ai/manifest.ts): eligibility + reason are computed server-side in the
+ * page, so this Client Component is a dumb renderer.
+ */
+export type FeatureModelOption = {
+  provider: ProviderId;
   modelId: string;
   displayName: string;
-  supportsPdf: boolean | null;
-  supportsStreaming: boolean | null;
+  eligible: boolean;
+  ineligibleReason: string | null;
 };
 
 const PROVIDER_LABELS: Record<ProviderId, string> = {
@@ -41,29 +46,27 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
 };
 
 /**
- * Per-feature model Select row. Lists the manifest models grouped by the
- * workspace's CONFIGURED providers; ineligible models are DISABLED with a native
- * `title` tooltip stating the reason (never hidden — design §9). onChange calls
- * the `setFeatureModel` Server Action.
+ * Per-feature model Select row. Renders the per-provider options the page
+ * resolved via getAvailableModels (PR2). Ineligible models are DISABLED with a
+ * native `title` tooltip stating the reason (never hidden — design §9). onChange
+ * calls the `setFeatureModel` Server Action.
  *
- * PR1b NOTE: this renders directly against the manifest passed by the page. PR2
- * introduces lib/ai/manifest.ts (getAvailableModels) which centralises the
- * eligibility + reason computation; the Select population is re-verified there.
- * Eligibility heuristic here: features that stream (adapt_template, summarize)
- * mark non-streaming models ineligible. extract_document accepts any model
- * because the F6 pdf-parse fallback covers non-PDF models (decision #757).
+ * PR2: the eligibility + reason computation now lives in lib/ai/manifest.ts
+ * (getAvailableModels), invoked by the page per configured provider + feature.
+ * This component no longer derives eligibility itself.
  */
 export function FeatureModelRow({
   feature,
   label,
-  manifest,
+  options,
   configuredProviders,
   currentProvider,
   currentModelId,
 }: {
   feature: FeatureId;
   label: string;
-  manifest: ManifestModel[];
+  /** Options grouped by configured provider, eligibility already resolved. */
+  options: Record<string, FeatureModelOption[]>;
   configuredProviders: ProviderId[];
   currentProvider: string | null;
   currentModelId: string | null;
@@ -75,16 +78,6 @@ export function FeatureModelRow({
       ? `${currentProvider}:${currentModelId}`
       : "",
   );
-
-  const requiresStreaming =
-    feature === "adapt_template" || feature === "summarize";
-
-  function ineligibleReason(model: ManifestModel): string | null {
-    if (requiresStreaming && model.supportsStreaming === false) {
-      return "Este modelo no soporta streaming";
-    }
-    return null;
-  }
 
   function handleChange(next: string) {
     setValue(next);
@@ -123,24 +116,21 @@ export function FeatureModelRow({
         </SelectTrigger>
         <SelectContent>
           {configuredProviders.map((provider) => {
-            const models = manifest.filter((m) => m.provider === provider);
+            const models = options[provider] ?? [];
             if (models.length === 0) return null;
             return (
               <SelectGroup key={provider}>
                 <SelectLabel>{PROVIDER_LABELS[provider]}</SelectLabel>
-                {models.map((model) => {
-                  const reason = ineligibleReason(model);
-                  return (
-                    <SelectItem
-                      key={`${provider}:${model.modelId}`}
-                      value={`${provider}:${model.modelId}`}
-                      disabled={reason !== null}
-                      title={reason ?? undefined}
-                    >
-                      {model.displayName}
-                    </SelectItem>
-                  );
-                })}
+                {models.map((model) => (
+                  <SelectItem
+                    key={`${provider}:${model.modelId}`}
+                    value={`${provider}:${model.modelId}`}
+                    disabled={!model.eligible}
+                    title={model.ineligibleReason ?? undefined}
+                  >
+                    {model.displayName}
+                  </SelectItem>
+                ))}
               </SelectGroup>
             );
           })}

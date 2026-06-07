@@ -32,7 +32,9 @@ const TEST_KEK = "ab".repeat(32);
 
 // A real, seeded Google model (free-tier default per decision #757).
 const GOOGLE_MODEL = "gemini-3.5-flash";
-const GOOGLE_MODEL_ALT = "gemini-3.1-flash-lite";
+// A second active Google model for the "change again" assertion (PR2 trimmed the
+// manifest to the 10 verified models; gemini-3.1-flash-lite is now deprecated).
+const GOOGLE_MODEL_ALT = "gemini-3.1-pro-preview";
 
 let priorKek: string | undefined;
 
