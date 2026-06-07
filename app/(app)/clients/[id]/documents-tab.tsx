@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 
 import {
+  ArrowClockwiseIcon,
   CaretDownIcon,
   CaretUpIcon,
   CheckCircleIcon,
@@ -46,6 +47,7 @@ import type { ExtractionResult } from "@/inngest/extract-document";
 import {
   deleteDocument,
   getDocumentSignedUrl,
+  retryExtraction,
   uploadDocument,
 } from "./actions";
 import { canDeleteDocument } from "./delete-document";
@@ -411,6 +413,57 @@ function DocumentPreviewDialog({
   );
 }
 
+/**
+ * Retry affordance for a FAILED extraction (F7c finding 4b). Resets the job to
+ * pending and re-enqueues the worker via the `retryExtraction` Server Action,
+ * which re-runs every gate from the top. Terminal causes (missing key, budget)
+ * re-fail cleanly with the curated message — no infinite burn. On success the
+ * row re-enters live progress via revalidatePath + the live job hook.
+ */
+function RetryExtractionButton({
+  jobId,
+  clientId,
+}: {
+  jobId: string;
+  clientId: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function onRetry() {
+    setError(null);
+    startTransition(async () => {
+      const result = await retryExtraction({ jobId, clientId });
+      if (!result.ok) {
+        setError(result.error);
+      }
+      // Success: revalidatePath re-renders the row as pending; the live job hook
+      // takes over the progress view. No local state to flip.
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onRetry}
+        disabled={pending}
+        className="w-fit"
+      >
+        {pending ? (
+          <SpinnerGapIcon className="animate-spin" data-icon="inline-start" />
+        ) : (
+          <ArrowClockwiseIcon weight="bold" data-icon="inline-start" />
+        )}
+        {pending ? "Reintentando…" : "Reintentar"}
+      </Button>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
 /** A single document card: live job state + the resolved terminal view. */
 function DocumentCard({
   doc,
@@ -490,12 +543,20 @@ function DocumentCard({
               status={status ?? "pending"}
             />
           ) : view === "failed" ? (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              <WarningCircleIcon
-                weight="fill"
-                className="mt-0.5 size-4 shrink-0"
-              />
-              <p>{errorMessageFor(live?.error ?? null)}</p>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                <WarningCircleIcon
+                  weight="fill"
+                  className="mt-0.5 size-4 shrink-0"
+                />
+                <p>{errorMessageFor(live?.error ?? null)}</p>
+              </div>
+              {doc.jobId ? (
+                <RetryExtractionButton
+                  jobId={doc.jobId}
+                  clientId={clientId}
+                />
+              ) : null}
             </div>
           ) : view === "extracted" && extracted ? (
             <ExtractionView data={extracted} />
