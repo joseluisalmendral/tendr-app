@@ -23,7 +23,8 @@ export type FeatureId =
   | "adapt_template"
   | "summarize"
   | "suggest"
-  | "extract_document";
+  | "extract_document"
+  | "beautify_email";
 
 /**
  * A manifest model already resolved for a feature by `getAvailableModels`

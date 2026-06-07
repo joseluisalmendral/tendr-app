@@ -25,6 +25,10 @@ function row(overrides: Partial<AdaptationRow> = {}): AdaptationRow {
     provider: "google",
     modelId: "gemini-2.5-flash",
     createdAt: "2026-06-07T10:30:00.000Z",
+    beautifiedHtml: null,
+    emailSubject: null,
+    emailPreheader: null,
+    beautifiedPalette: null,
     ...overrides,
   };
 }

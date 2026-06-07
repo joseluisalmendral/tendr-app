@@ -13,6 +13,7 @@ import {
   CaretDownIcon,
   CheckIcon,
   CopyIcon,
+  EnvelopeSimpleIcon,
   SparkleIcon,
   SpinnerGapIcon,
   TrashIcon,
@@ -62,6 +63,7 @@ import {
   adaptationTimestamp,
   applyDeleteResult,
 } from "./adaptation-history";
+import { BeautifyEmailPanel } from "./beautify-email-panel";
 import { consumeAdaptStream } from "./consume-adapt-stream";
 import { EXTRA_INSTRUCTIONS_MAX } from "./template-limits";
 import type { ClientOption } from "./templates-island";
@@ -114,6 +116,9 @@ export function AdaptDialog({
   const [output, setOutput] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [history, setHistory] = useState<AdaptationRow[]>([]);
+  // Which history row is expanded. Lifted here (controlled) so the done-state
+  // "Convertir en email" entry can expand the freshest adaptation directly.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   function reset() {
@@ -152,6 +157,7 @@ export function AdaptDialog({
       reset();
       setExtraInstructions("");
       setHistory([]);
+      setExpandedId(null);
     }
     setOpen(next);
   }
@@ -159,6 +165,7 @@ export function AdaptDialog({
   function handleClientChange(next: string) {
     setClientId(next);
     reset();
+    setExpandedId(null);
     void loadHistory(next);
   }
 
@@ -229,6 +236,9 @@ export function AdaptDialog({
   const isStreaming = phase === "streaming";
   const hasClients = clients.length > 0;
   const canCopyOutput = phase === "done" && output.trim().length > 0;
+  // The done-state beautify entry needs a persisted row to target; the newest
+  // history row (reloaded after the stream) is the just-created adaptation.
+  const canBeautify = phase === "done" && history.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -323,13 +333,31 @@ export function AdaptDialog({
                   <p className="text-muted-foreground">Generando…</p>
                 )}
               </div>
+              {canBeautify ? (
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setExpandedId(history[0]!.id)}
+                  >
+                    <EnvelopeSimpleIcon data-icon="inline-start" />
+                    Convertir en email
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
           {clientId ? (
             <>
               <Separator />
-              <AdaptationHistory rows={history} onChange={setHistory} />
+              <AdaptationHistory
+                rows={history}
+                onChange={setHistory}
+                expandedId={expandedId}
+                onExpandedChange={setExpandedId}
+              />
             </>
           ) : null}
         </div>
@@ -358,11 +386,16 @@ export function AdaptDialog({
 function AdaptationHistory({
   rows,
   onChange,
+  expandedId,
+  onExpandedChange,
 }: {
   rows: AdaptationRow[];
   onChange: (rows: AdaptationRow[]) => void;
+  /** Controlled expanded-row id (lifted to the dialog so the done-state entry
+   * can expand the freshest adaptation). */
+  expandedId: string | null;
+  onExpandedChange: (id: string | null) => void;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Delete is optimistic-on-success: the pure `applyDeleteResult` decides the
   // new list + which toast to surface, so the policy is testable without a DOM.
@@ -373,6 +406,35 @@ function AdaptationHistory({
       if (outcome.removed) onChange(outcome.rows);
       if (outcome.toast.kind === "success") toast.success(outcome.toast.message);
       else toast.error(outcome.toast.message);
+    },
+    [rows, onChange],
+  );
+
+  // Patches a row's beautified_* fields in place after a generation so the
+  // re-opened panel keeps the latest email (PR-F7C-4b regenerate-in-place).
+  const handleBeautified = useCallback(
+    (
+      id: string,
+      email: {
+        subject: string;
+        preheader: string;
+        html: string;
+        paletteId: string;
+      },
+    ) => {
+      onChange(
+        rows.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                beautifiedHtml: email.html,
+                emailSubject: email.subject,
+                emailPreheader: email.preheader,
+                beautifiedPalette: email.paletteId,
+              }
+            : r,
+        ),
+      );
     },
     [rows, onChange],
   );
@@ -397,9 +459,10 @@ function AdaptationHistory({
               row={row}
               expanded={expandedId === row.id}
               onToggle={() =>
-                setExpandedId((prev) => (prev === row.id ? null : row.id))
+                onExpandedChange(expandedId === row.id ? null : row.id)
               }
               onDelete={handleDelete}
+              onBeautified={handleBeautified}
             />
           ))}
         </ul>
@@ -413,17 +476,42 @@ function AdaptationHistoryRow({
   expanded,
   onToggle,
   onDelete,
+  onBeautified,
 }: {
   row: AdaptationRow;
   expanded: boolean;
   onToggle: () => void;
   onDelete: (id: string) => Promise<void>;
+  onBeautified: (
+    id: string,
+    email: {
+      subject: string;
+      preheader: string;
+      html: string;
+      paletteId: string;
+    },
+  ) => void;
 }) {
   const [pending, startTransition] = useTransition();
+  // The beautify panel mounts on demand; if the row was already beautified we
+  // open it pre-populated so the user sees the existing email and can regenerate.
+  const [showBeautify, setShowBeautify] = useState(
+    Boolean(row.beautifiedHtml),
+  );
 
   function handleDelete() {
     startTransition(() => onDelete(row.id));
   }
+
+  const initialEmail =
+    row.beautifiedHtml && row.emailSubject !== null && row.emailPreheader !== null
+      ? {
+          subject: row.emailSubject,
+          preheader: row.emailPreheader,
+          html: row.beautifiedHtml,
+          paletteId: row.beautifiedPalette ?? "",
+        }
+      : null;
 
   return (
     <li className="rounded-md border">
@@ -474,6 +562,26 @@ function AdaptationHistoryRow({
           <div className="prose prose-sm dark:prose-invert max-w-none text-sm break-words">
             <ReactMarkdown>{row.resultText}</ReactMarkdown>
           </div>
+
+          <Separator className="my-3" />
+
+          {showBeautify ? (
+            <BeautifyEmailPanel
+              adaptationId={row.id}
+              initial={initialEmail}
+              onGenerated={(email) => onBeautified(row.id, email)}
+            />
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowBeautify(true)}
+            >
+              <EnvelopeSimpleIcon data-icon="inline-start" />
+              Convertir en email
+            </Button>
+          )}
         </div>
       ) : null}
     </li>

@@ -39,7 +39,15 @@ export const deleteAdaptationSchema = z.object({ id: z.string().uuid() });
 export type ListAdaptationsInput = z.input<typeof listAdaptationsSchema>;
 export type DeleteAdaptationInput = z.input<typeof deleteAdaptationSchema>;
 
-/** Row shape the adapt-dialog history renders (newest-first). */
+/**
+ * Row shape the adapt-dialog history renders (newest-first).
+ *
+ * PR-F7C-4b: the beautified_* fields surface a row's previously generated email
+ * (NULL = "not yet beautified") so the history can re-open an existing beautified
+ * email and the panel can regenerate it with a different palette WITHOUT
+ * re-adapting. The HTML / subject / preheader are the user's own RLS-scoped
+ * workspace PII — rendered only in their own UI, never logged or traced.
+ */
 export type AdaptationRow = {
   id: string;
   resultText: string;
@@ -47,6 +55,10 @@ export type AdaptationRow = {
   provider: string | null;
   modelId: string | null;
   createdAt: string;
+  beautifiedHtml: string | null;
+  emailSubject: string | null;
+  emailPreheader: string | null;
+  beautifiedPalette: string | null;
 };
 
 export type AdaptationDeleteResult =
@@ -69,6 +81,10 @@ const SELECT_COLUMNS = {
   provider: templateAdaptations.provider,
   modelId: templateAdaptations.modelId,
   createdAt: templateAdaptations.createdAt,
+  beautifiedHtml: templateAdaptations.beautifiedHtml,
+  emailSubject: templateAdaptations.emailSubject,
+  emailPreheader: templateAdaptations.emailPreheader,
+  beautifiedPalette: templateAdaptations.beautifiedPalette,
 } as const;
 
 function toRow(row: {
@@ -78,6 +94,10 @@ function toRow(row: {
   provider: string | null;
   modelId: string | null;
   createdAt: Date;
+  beautifiedHtml: string | null;
+  emailSubject: string | null;
+  emailPreheader: string | null;
+  beautifiedPalette: string | null;
 }): AdaptationRow {
   return {
     id: row.id,
@@ -86,6 +106,10 @@ function toRow(row: {
     provider: row.provider,
     modelId: row.modelId,
     createdAt: row.createdAt.toISOString(),
+    beautifiedHtml: row.beautifiedHtml,
+    emailSubject: row.emailSubject,
+    emailPreheader: row.emailPreheader,
+    beautifiedPalette: row.beautifiedPalette,
   };
 }
 
