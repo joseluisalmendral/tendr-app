@@ -43,6 +43,13 @@
       "when": 1781100000000,
       "tag": "0005_template_adaptations",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781200000000,
+      "tag": "0006_ai_feature_beautify_email",
+      "breakpoints": true
     }
   ]
 }

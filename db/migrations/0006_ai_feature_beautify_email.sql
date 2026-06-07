@@ -1,0 +1,24 @@
+-- ============================================================================
+-- 0006_ai_feature_beautify_email — add the 5th ai_feature enum value
+-- ============================================================================
+-- F7c PR-F7C-4a (beautify_email, plan-beautify #778): registers the new
+-- `beautify_email` value on the existing `ai_feature` Postgres enum so the
+-- feature can be routed (getModelForFeature), budgeted, and ledgered like the
+-- other four.
+--
+-- ENUM-MIGRATION GOTCHA (the highest-risk item of this slice):
+--   `ALTER TYPE ... ADD VALUE` historically could not run inside a transaction
+--   block. Since Postgres 12 it CAN, with one rule: the newly added value may
+--   not be USED (compared/inserted) in the SAME transaction that adds it.
+--   The drizzle-orm postgres-js migrator wraps each migration file in a single
+--   transaction, so this migration is SAFE only because it does nothing but add
+--   the value — NO row, mapping, or seed here references `beautify_email`.
+--   The manifest seed (db/seeds/ai_model_manifest.ts) that lists the value in
+--   `default_for_features` runs as a SEPARATE process AFTER migrations commit,
+--   so the value is already durable by the time anything uses it.
+--
+-- `IF NOT EXISTS` keeps the migration idempotent (re-applying is a no-op),
+-- mirroring the project's defensive DDL convention.
+-- ============================================================================
+
+ALTER TYPE "ai_feature" ADD VALUE IF NOT EXISTS 'beautify_email';
