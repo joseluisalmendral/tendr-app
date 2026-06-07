@@ -17,6 +17,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL(".", import.meta.url)),
+      // `server-only` throws when imported outside an RSC build. The F6 worker
+      // and its service_role db module are legitimately server-only but must be
+      // importable under vitest (Node), so stub the guard to a no-op here.
+      "server-only": fileURLToPath(
+        new URL("./test/stubs/server-only.ts", import.meta.url),
+      ),
     },
   },
   test: {
@@ -24,6 +30,7 @@ export default defineConfig({
       "db/__tests__/**/*.test.ts",
       "app/**/__tests__/**/*.test.ts",
       "lib/**/__tests__/**/*.test.ts",
+      "inngest/**/__tests__/**/*.test.ts",
     ],
     environment: "node",
     // RLS tests share the local stack and mutate tenant state — keep them
