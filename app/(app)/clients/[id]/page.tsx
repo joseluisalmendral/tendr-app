@@ -8,6 +8,8 @@ import { ensureAnonymousWorkspace } from "@/app/(auth)/actions";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/db";
 import { cases, clients, notes } from "@/db/schema/crm";
+import { documents } from "@/db/schema/documents";
+import { jobs } from "@/db/schema/jobs";
 import { getCurrentWorkspace } from "@/lib/auth/get-current-workspace";
 
 import {
@@ -15,6 +17,8 @@ import {
   type CaseRow,
   type NoteRow,
 } from "./client-detail-tabs";
+import type { DocumentRow } from "./documents-tab";
+import type { JobStatus } from "./use-job";
 
 const CLIENT_STATUS_LABELS: Record<"active" | "archived", string> = {
   active: "Activo",
@@ -72,7 +76,7 @@ export default async function ClientDetailPage({
     notFound();
   }
 
-  const [clientCases, clientNotes] = await Promise.all([
+  const [clientCases, clientNotes, clientDocuments] = await Promise.all([
     db
       .select({
         id: cases.id,
@@ -93,7 +97,49 @@ export default async function ClientDetailPage({
       .from(notes)
       .where(and(eq(notes.workspaceId, workspaceId), eq(notes.clientId, id)))
       .orderBy(desc(notes.createdAt)),
+    db
+      .select({
+        id: documents.id,
+        filename: documents.filename,
+        sizeBytes: documents.sizeBytes,
+        createdAt: documents.createdAt,
+        extractedMetadata: documents.extractedMetadata,
+      })
+      .from(documents)
+      .where(
+        and(eq(documents.workspaceId, workspaceId), eq(documents.clientId, id)),
+      )
+      .orderBy(desc(documents.createdAt)),
   ]);
+
+  // Resolve each document's latest extraction job (jobs.payload.documentId links
+  // the two; no FK column exists). The user-session RLS SELECT policy on `jobs`
+  // scopes this read. The hook then takes over for live progress per document.
+  const docIds = clientDocuments.map((d) => d.id);
+  const jobRows = docIds.length
+    ? await db
+        .select({
+          id: jobs.id,
+          status: jobs.status,
+          payload: jobs.payload,
+          createdAt: jobs.createdAt,
+        })
+        .from(jobs)
+        .where(eq(jobs.workspaceId, workspaceId))
+        .orderBy(desc(jobs.createdAt))
+    : [];
+
+  // Keep only the latest job per documentId (rows are already newest-first).
+  const latestJobByDoc = new Map<string, { id: string; status: JobStatus }>();
+  for (const job of jobRows) {
+    const payloadDocId = (job.payload as { documentId?: string } | null)
+      ?.documentId;
+    if (!payloadDocId || latestJobByDoc.has(payloadDocId)) continue;
+    latestJobByDoc.set(payloadDocId, {
+      id: job.id,
+      status: job.status as JobStatus,
+    });
+  }
 
   const caseRows: CaseRow[] = clientCases.map((row) => ({
     id: row.id,
@@ -108,6 +154,19 @@ export default async function ClientDetailPage({
     body: row.body,
     createdAt: row.createdAt.toISOString(),
   }));
+
+  const documentRows: DocumentRow[] = clientDocuments.map((row) => {
+    const job = latestJobByDoc.get(row.id) ?? null;
+    return {
+      id: row.id,
+      filename: row.filename,
+      sizeBytes: row.sizeBytes,
+      createdAt: row.createdAt.toISOString(),
+      extractedMetadata: row.extractedMetadata,
+      jobId: job?.id ?? null,
+      jobStatus: job?.status ?? null,
+    };
+  });
 
   const tags = client.tags ?? [];
   const status = client.status ?? "active";
@@ -151,8 +210,10 @@ export default async function ClientDetailPage({
 
       <ClientDetailTabs
         clientId={client.id}
+        workspaceId={workspaceId}
         initialCases={caseRows}
         initialNotes={noteRows}
+        initialDocuments={documentRows}
       />
     </div>
   );
