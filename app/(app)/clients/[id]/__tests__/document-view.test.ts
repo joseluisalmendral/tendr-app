@@ -73,6 +73,28 @@ describe("errorMessageFor — failed job always has an actionable message", () =
     expect(errorMessageFor(null).length).toBeGreaterThan(0);
     expect(errorMessageFor({}).length).toBeGreaterThan(0);
   });
+
+  it("ships NO voseo in any touched copy — neutral Spanish only (R-COPY)", () => {
+    // Every error_code path + the default + the structured-message fallback.
+    const messages = [
+      errorMessageFor(null),
+      errorMessageFor({}),
+      errorMessageFor({ error_code: "validation_error" }),
+      errorMessageFor({ error_code: "provider_error" }),
+      errorMessageFor({ error_code: "invalid_api_key" }),
+      errorMessageFor({ error_code: "document_error" }),
+    ];
+    for (const msg of messages) {
+      expect(msg).not.toContain("Volvé");
+    }
+    // The neutral form is present where the voseo one used to be.
+    expect(errorMessageFor({ error_code: "provider_error" })).toContain(
+      "Vuelve a intentarlo",
+    );
+    expect(errorMessageFor({ error_code: "unknown_code" })).toContain(
+      "Vuelve a intentarlo",
+    );
+  });
 });
 
 describe("deriveSteps — per-step progress from jobs.progress", () => {
