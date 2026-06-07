@@ -6,6 +6,7 @@ import {
   errorMessageFor,
   EXTRACTION_STEPS,
   resolveDocumentView,
+  shouldAutoExpand,
 } from "../document-view";
 
 /**
@@ -99,6 +100,28 @@ describe("errorMessageFor — failed job always has an actionable message", () =
     expect(errorMessageFor({ error_code: "unknown_code" })).toContain(
       "Vuelve a intentarlo",
     );
+  });
+});
+
+describe("shouldAutoExpand — auto-expand active rows (R-COLLAPSE, fork 3)", () => {
+  it("auto-expands a pending job", () => {
+    expect(shouldAutoExpand("pending")).toBe(true);
+  });
+
+  it("auto-expands a running job", () => {
+    expect(shouldAutoExpand("running")).toBe(true);
+  });
+
+  it("collapses a completed job", () => {
+    expect(shouldAutoExpand("completed")).toBe(false);
+  });
+
+  it("collapses a failed job", () => {
+    expect(shouldAutoExpand("failed")).toBe(false);
+  });
+
+  it("collapses a row with no job (null status)", () => {
+    expect(shouldAutoExpand(null)).toBe(false);
   });
 });
 
