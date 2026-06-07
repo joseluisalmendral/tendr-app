@@ -2,7 +2,7 @@
 
 import { useOptimistic } from "react";
 
-import { FileTextIcon, StackIcon } from "@phosphor-icons/react";
+import { StackIcon } from "@phosphor-icons/react";
 
 import {
   Empty,
@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { CasesTab } from "./cases-tab";
 import type { CaseStatus } from "./create-case";
+import { DocumentsTab, type DocumentRow } from "./documents-tab";
 import { NotesTab } from "./notes-tab";
 
 export type CaseRow = {
@@ -37,18 +38,22 @@ export type NoteRow = {
  * the overlay is dropped once `revalidatePath` re-renders the RSC with the
  * authoritative row).
  *
- * Casos and Notas are functional now; Documentos and Plantillas are honest
- * "Próximamente" placeholders — those features arrive in later phases, so we
+ * Casos, Notas and Documentos are functional now; Plantillas is an honest
+ * "Próximamente" placeholder — that feature arrives in a later phase, so we
  * show a real empty state rather than fake UI.
  */
 export function ClientDetailTabs({
   clientId,
+  workspaceId,
   initialCases,
   initialNotes,
+  initialDocuments,
 }: {
   clientId: string;
+  workspaceId: string;
   initialCases: CaseRow[];
   initialNotes: NoteRow[];
+  initialDocuments: DocumentRow[];
 }) {
   const [optimisticCases, addOptimisticCase] = useOptimistic(
     initialCases,
@@ -86,18 +91,11 @@ export function ClientDetailTabs({
       </TabsContent>
 
       <TabsContent value="documents" className="pt-4">
-        <Empty className="rounded-lg border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <FileTextIcon />
-            </EmptyMedia>
-            <EmptyTitle>Documentos</EmptyTitle>
-            <EmptyDescription>
-              Próximamente vas a poder adjuntar y extraer datos de documentos
-              acá.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <DocumentsTab
+          clientId={clientId}
+          workspaceId={workspaceId}
+          documents={initialDocuments}
+        />
       </TabsContent>
 
       <TabsContent value="templates" className="pt-4">
