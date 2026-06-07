@@ -97,4 +97,14 @@ describe("envelope encryption", () => {
       process.env.AI_KEY_KEK = saved;
     }
   });
+
+  it("64-char but non-hex KEK throws a clear /AI_KEY_KEK/ error (not an opaque cipher error)", () => {
+    const saved = process.env.AI_KEY_KEK;
+    process.env.AI_KEY_KEK = "z".repeat(64);
+    try {
+      expect(() => encryptProviderKey("sk-test")).toThrow(/AI_KEY_KEK/);
+    } finally {
+      process.env.AI_KEY_KEK = saved;
+    }
+  });
 });

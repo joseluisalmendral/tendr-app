@@ -144,15 +144,21 @@ export async function getProviderClient(
   const client = providerFactory(provider, plaintextKey);
 
   // Stamp last_used_at (serviceDb, explicit workspaceId tenancy gate).
-  await serviceDb
-    .update(aiProviderConfigs)
-    .set({ lastUsedAt: new Date() })
-    .where(
-      and(
-        eq(aiProviderConfigs.workspaceId, workspaceId),
-        eq(aiProviderConfigs.provider, provider),
-      ),
-    );
+  // Best-effort: a transient failure of this non-critical write must not
+  // block an otherwise valid AI call.
+  try {
+    await serviceDb
+      .update(aiProviderConfigs)
+      .set({ lastUsedAt: new Date() })
+      .where(
+        and(
+          eq(aiProviderConfigs.workspaceId, workspaceId),
+          eq(aiProviderConfigs.provider, provider),
+        ),
+      );
+  } catch {
+    // Swallow: the stamp is informational (shown in /settings/ai), never load-bearing.
+  }
 
   return client;
 }

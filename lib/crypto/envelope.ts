@@ -37,7 +37,7 @@ const TAG_LENGTH = 16; // 128-bit GCM auth tag.
  */
 function loadKek(): Buffer {
   const hex = process.env.AI_KEY_KEK;
-  if (!hex || hex.length !== KEK_HEX_LENGTH) {
+  if (!hex || !/^[0-9a-fA-F]{64}$/.test(hex)) {
     throw new Error(
       "AI_KEY_KEK env var missing or invalid (expected 64 hex chars)",
     );
