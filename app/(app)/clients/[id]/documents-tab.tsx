@@ -536,7 +536,7 @@ export function DocumentsTab({
     // Inline client-side validation mirrors the server's Zod rules so the user
     // gets immediate feedback (the server re-validates authoritatively).
     if (!(file instanceof File) || file.size === 0) {
-      setError("Elegí un archivo PDF.");
+      setError("Elige un archivo PDF.");
       return;
     }
     if (file.type !== "application/pdf") {
@@ -608,7 +608,7 @@ export function DocumentsTab({
             </EmptyMedia>
             <EmptyTitle>Todavía no hay documentos</EmptyTitle>
             <EmptyDescription>
-              Subí un PDF para extraer fechas, importes y partes implicadas
+              Sube un PDF para extraer fechas, importes y partes implicadas
               automáticamente.
             </EmptyDescription>
           </EmptyHeader>
