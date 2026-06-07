@@ -71,10 +71,27 @@ const ERROR_MESSAGES: Record<string, string> = {
     "El servicio de extracción falló. Vuelve a intentarlo más tarde.",
   invalid_api_key: "La clave del proveedor de IA no es válida.",
   document_error: "No se pudo leer el documento. Verifica que el PDF sea válido.",
+  no_key_configured:
+    "No hay una clave de IA configurada para la extracción. Añádela en /settings/ai.",
+  budget_exceeded:
+    "Has superado el presupuesto mensual de IA. Súbelo en /settings/ai.",
 };
 
 const DEFAULT_ERROR_MESSAGE =
   "La extracción falló. Vuelve a intentarlo más tarde.";
+
+/**
+ * Terminal extraction failures: retrying won't help until the user fixes the
+ * root cause (no key configured, or monthly budget exceeded). The extractor
+ * fails these with NonRetriableError, so a retry just re-fails the same way.
+ */
+const TERMINAL_ERROR_CODES = new Set(["no_key_configured", "budget_exceeded"]);
+
+export function isTerminalExtractionError(
+  errorCode: string | null | undefined,
+): boolean {
+  return errorCode != null && TERMINAL_ERROR_CODES.has(errorCode);
+}
 
 /** Human-facing message for a structured job error (never an empty/raw code). */
 export function errorMessageFor(error: JobErrorResult | null): string {

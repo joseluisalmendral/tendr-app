@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 
 import {
@@ -55,6 +56,7 @@ import {
   asExtractionResult,
   deriveSteps,
   errorMessageFor,
+  isTerminalExtractionError,
   resolveDocumentView,
   shouldAutoExpand,
 } from "./document-view";
@@ -551,6 +553,15 @@ function DocumentCard({
                 />
                 <p>{errorMessageFor(live?.error ?? null)}</p>
               </div>
+              {isTerminalExtractionError(live?.error?.error_code) ? (
+                <p className="text-xs text-muted-foreground">
+                  Reintentar no resolverá esto hasta que corrijas la causa en{" "}
+                  <Link href="/settings/ai" className="underline">
+                    /settings/ai
+                  </Link>
+                  .
+                </p>
+              ) : null}
               {doc.jobId ? (
                 <RetryExtractionButton
                   jobId={doc.jobId}
