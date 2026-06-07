@@ -68,13 +68,13 @@ export function deriveSteps(
 const ERROR_MESSAGES: Record<string, string> = {
   validation_error: "El documento no pudo procesarse: el formato no es válido.",
   provider_error:
-    "El servicio de extracción falló. Volvé a intentarlo más tarde.",
+    "El servicio de extracción falló. Vuelve a intentarlo más tarde.",
   invalid_api_key: "La clave del proveedor de IA no es válida.",
-  document_error: "No se pudo leer el documento. Verificá que el PDF sea válido.",
+  document_error: "No se pudo leer el documento. Verifica que el PDF sea válido.",
 };
 
 const DEFAULT_ERROR_MESSAGE =
-  "La extracción falló. Volvé a intentarlo más tarde.";
+  "La extracción falló. Vuelve a intentarlo más tarde.";
 
 /** Human-facing message for a structured job error (never an empty/raw code). */
 export function errorMessageFor(error: JobErrorResult | null): string {

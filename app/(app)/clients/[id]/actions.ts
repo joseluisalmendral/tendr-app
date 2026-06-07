@@ -14,6 +14,10 @@ import { createClient as createSupabaseServerClient } from "@/lib/supabase/serve
 import { createCaseInWorkspace, type CreateCaseState } from "./create-case";
 import { createNoteInWorkspace, type CreateNoteState } from "./create-note";
 import {
+  deleteDocumentWith,
+  type DeleteDocumentResult,
+} from "./delete-document";
+import {
   getDocumentSignedUrlWith,
   uploadDocumentWith,
   type UploadDocumentResult,
@@ -21,6 +25,7 @@ import {
 
 export type { CreateCaseState } from "./create-case";
 export type { CreateNoteState } from "./create-note";
+export type { DeleteDocumentResult } from "./delete-document";
 export type { UploadDocumentResult } from "./upload-document";
 
 /**
@@ -162,6 +167,40 @@ export async function uploadDocument(
 export async function getDocumentSignedUrl(documentId: string) {
   const supabase = await createSupabaseServerClient();
   return getDocumentSignedUrlWith({ supabase, db }, documentId);
+}
+
+/**
+ * Server Action: deletes a document the caller owns — the Storage object plus
+ * the `documents` row. `jobs`/`ai_usage_ledger` history is KEPT (ADR-1).
+ *
+ * Thin cookie wrapper around the pure `deleteDocumentWith`: resolves the
+ * caller's workspace and the cookie-bound Supabase client, then injects the
+ * Storage + Drizzle effects. The terminal-state guard runs server-side inside
+ * the seam, so a stale UI cannot force-delete a running job. `clientId` is used
+ * only to revalidate the view — tenancy is owned by the workspace scope + RLS,
+ * never by the client-passed id. Returns `{ ok }`.
+ */
+export async function deleteDocument(input: {
+  documentId: string;
+  clientId: string;
+}): Promise<DeleteDocumentResult> {
+  const workspaceId = await resolveWorkspaceId();
+  if (!workspaceId) {
+    return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+
+  const result = await deleteDocumentWith(
+    { supabase, db },
+    { workspaceId, documentId: input.documentId },
+  );
+
+  if (result.ok) {
+    revalidatePath(`/clients/${input.clientId}`);
+  }
+
+  return result;
 }
 
 /**

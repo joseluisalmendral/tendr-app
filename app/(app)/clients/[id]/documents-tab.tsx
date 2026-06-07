@@ -6,6 +6,7 @@ import {
   CheckCircleIcon,
   FileTextIcon,
   SpinnerGapIcon,
+  TrashIcon,
   UploadSimpleIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
@@ -19,6 +20,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -29,7 +40,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ExtractionResult } from "@/inngest/extract-document";
 
-import { uploadDocument } from "./actions";
+import { deleteDocument, uploadDocument } from "./actions";
+import { canDeleteDocument } from "./delete-document";
 import {
   asExtractionResult,
   deriveSteps,
@@ -161,12 +173,122 @@ function ExtractionView({ data }: { data: ExtractionResult }) {
   );
 }
 
+const NON_TERMINAL_DELETE_REASON =
+  "La extracción sigue en curso. Espera a que termine.";
+
+/**
+ * Per-row delete affordance. ENABLED only when the document's latest job is
+ * terminal (canDeleteDocument); pending/running render it disabled with a
+ * visible reason. A confirm dialog (destructive) gates the actual call. On
+ * failure the row is kept and the action stays retryable — `deleteDocument` is
+ * idempotent, so re-clicking after a partial failure recovers (storage.remove
+ * on a now-missing path is non-fatal).
+ */
+function DeleteDocumentButton({
+  documentId,
+  clientId,
+  filename,
+  status,
+}: {
+  documentId: string;
+  clientId: string;
+  filename: string;
+  status: JobStatus | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const canDelete = canDeleteDocument(status);
+
+  function onConfirm() {
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteDocument({ documentId, clientId });
+      if (!result.ok) {
+        // Keep the row; surface the neutral-Spanish error and allow a re-click
+        // (the delete is idempotent on a partial failure).
+        setError(result.error);
+        return;
+      }
+      // Success: the row disappears via revalidatePath; just close the dialog.
+      setOpen(false);
+    });
+  }
+
+  if (!canDelete) {
+    return (
+      <span
+        className="text-xs text-muted-foreground"
+        title={NON_TERMINAL_DELETE_REASON}
+      >
+        {NON_TERMINAL_DELETE_REASON}
+      </span>
+    );
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setError(null);
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Eliminar documento"
+        >
+          <TrashIcon className="text-muted-foreground" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Eliminar documento</DialogTitle>
+          <DialogDescription>
+            Vas a eliminar «{filename}». El archivo se borra de forma
+            permanente; el historial de la extracción se conserva. Esta acción
+            no se puede deshacer.
+          </DialogDescription>
+        </DialogHeader>
+
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline" disabled={pending}>
+              Cancelar
+            </Button>
+          </DialogClose>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={pending}
+          >
+            {pending ? (
+              <SpinnerGapIcon className="animate-spin" />
+            ) : (
+              <TrashIcon weight="bold" />
+            )}
+            {pending ? "Eliminando…" : "Eliminar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** A single document card: live job state + the resolved terminal view. */
 function DocumentCard({
   doc,
+  clientId,
   workspaceId,
 }: {
   doc: DocumentRow;
+  clientId: string;
   workspaceId: string;
 }) {
   // Subscribe to this document's job. The hook's catch-up read guarantees a
@@ -185,11 +307,23 @@ function DocumentCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">{doc.filename}</span>
-        </CardTitle>
-        <CardDescription>{formatSize(doc.sizeBytes)}</CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">{doc.filename}</span>
+            </CardTitle>
+            <CardDescription>{formatSize(doc.sizeBytes)}</CardDescription>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <DeleteDocumentButton
+              documentId={doc.id}
+              clientId={clientId}
+              filename={doc.filename}
+              status={status}
+            />
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {view === "progress" ? (
@@ -299,7 +433,12 @@ export function DocumentsTab({
       {documents.length > 0 ? (
         <div className="flex flex-col gap-3">
           {documents.map((doc) => (
-            <DocumentCard key={doc.id} doc={doc} workspaceId={workspaceId} />
+            <DocumentCard
+              key={doc.id}
+              doc={doc}
+              clientId={clientId}
+              workspaceId={workspaceId}
+            />
           ))}
         </div>
       ) : (
