@@ -2,6 +2,7 @@
 // (generate_typescript_types). Regenerate after applying migrations:
 // the schema source of truth is db/schema/ (Drizzle).
 
+
 export type Json =
   | string
   | number
@@ -11,10 +12,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -164,6 +185,7 @@ export type Database = {
       ai_usage_ledger: {
         Row: {
           cost_cents: number
+          cost_microcents: number
           created_at: string
           feature: string
           id: number
@@ -175,6 +197,7 @@ export type Database = {
         }
         Insert: {
           cost_cents: number
+          cost_microcents: number
           created_at?: string
           feature: string
           id?: number
@@ -186,6 +209,7 @@ export type Database = {
         }
         Update: {
           cost_cents?: number
+          cost_microcents?: number
           created_at?: string
           feature?: string
           id?: number
@@ -632,8 +656,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      log_promotion: {
-        Args: Record<PropertyKey, never>
+      log_promotion: { Args: never; Returns: undefined }
+      move_case: {
+        Args: {
+          p_case_id: string
+          p_to_status: Database["public"]["Enums"]["case_status"]
+        }
         Returns: undefined
       }
     }
@@ -779,6 +807,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       ai_feature: [
@@ -802,3 +833,4 @@ export const Constants = {
     },
   },
 } as const
+

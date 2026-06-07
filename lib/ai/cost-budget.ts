@@ -5,12 +5,19 @@ import type * as schema from "@/db/schema";
 import { aiUsageLedger, workspaces } from "@/db/schema";
 
 /**
- * Monthly cost budget gate (F7 Block D / PR3).
+ * Monthly cost budget gate (F7 Block D / PR3; F7c finding 1).
  *
- * Sums the CURRENT UTC month's `ai_usage_ledger.cost_cents` for a workspace and
- * compares it to `workspaces.ai_monthly_budget_cents`. `assertWithinBudget` runs
- * BEFORE each model call (adaptTemplate, summarize, suggest, the Inngest
- * extractor); on exceed it throws `BudgetExceededError` (HTTP 429 semantics).
+ * Sums the CURRENT UTC month's `ai_usage_ledger.cost_microcents` (USD * 10000)
+ * for a workspace and compares it to `workspaces.ai_monthly_budget_cents`.
+ * `assertWithinBudget` runs BEFORE each model call (adaptTemplate, summarize,
+ * suggest, the Inngest extractor); on exceed it throws `BudgetExceededError`
+ * (HTTP 429 semantics).
+ *
+ * Comparison unit (F7c): the gate compares MICRO-CENTS on both sides — the
+ * ledger sum vs. `budget_cents * 10000` — so sub-cent rows are accounted exactly
+ * and the boundary semantics match the prior whole-cent behavior at the 80%/100%
+ * marks. The budget column stays INTEGER cents (unchanged); `usedCents` is the
+ * sum rounded to the nearest cent for display only.
  *
  * Tenancy: every read carries an EXPLICIT `eq(workspaceId)` predicate as the
  * authoritative tenancy gate (the session pooler can bypass RLS). The ledger sum
@@ -72,11 +79,20 @@ export function isBudgetExceededError(
 }
 
 export interface BudgetStatus {
-  /** Cents spent in the current UTC month for this workspace. */
+  /**
+   * Micro-cents (USD * 10000) spent in the current UTC month. The authoritative
+   * spend figure — the gate and percentage are computed from this so sub-cent
+   * rows count exactly (F7c finding 1).
+   */
+  usedMicrocents: number;
+  /**
+   * Cents spent this month, rounded to the nearest cent from `usedMicrocents`.
+   * For display/back-compat only; never used for the gate comparison.
+   */
   usedCents: number;
   /** The workspace monthly budget in cents (default 5000). */
   budgetCents: number;
-  /** Percentage of budget used (0-100+). */
+  /** Percentage of budget used (0-100+), computed from micro-cents. */
   percentUsed: number;
   /** True while the workspace is still under budget. */
   withinBudget: boolean;
@@ -93,7 +109,7 @@ export async function getBudgetStatus(
   workspaceId: string,
 ): Promise<BudgetStatus> {
   const [usage] = await db
-    .select({ total: sum(aiUsageLedger.costCents) })
+    .select({ total: sum(aiUsageLedger.costMicrocents) })
     .from(aiUsageLedger)
     .where(
       and(
@@ -109,16 +125,19 @@ export async function getBudgetStatus(
     .where(eq(workspaces.id, workspaceId))
     .limit(1);
 
-  const usedCents = Number(usage?.total ?? 0);
+  const usedMicrocents = Number(usage?.total ?? 0);
   const budgetCents = ws?.budget ?? DEFAULT_BUDGET_CENTS;
+  // Compare in micro-cents on both sides so sub-cent spend is exact.
+  const budgetMicrocents = budgetCents * 10000;
   const percentUsed =
-    budgetCents > 0 ? (usedCents / budgetCents) * 100 : 0;
+    budgetMicrocents > 0 ? (usedMicrocents / budgetMicrocents) * 100 : 0;
 
   return {
-    usedCents,
+    usedMicrocents,
+    usedCents: Math.round(usedMicrocents / 10000),
     budgetCents,
     percentUsed,
-    withinBudget: usedCents < budgetCents,
+    withinBudget: usedMicrocents < budgetMicrocents,
     warningThreshold: percentUsed >= WARNING_PERCENT,
   };
 }
@@ -139,7 +158,12 @@ export async function assertWithinBudget(
   estimatedCostCents = 0,
 ): Promise<BudgetStatus> {
   const status = await getBudgetStatus(db, workspaceId);
-  if (status.usedCents + estimatedCostCents >= status.budgetCents) {
+  // Compare in micro-cents so accrued sub-cent spend is counted exactly.
+  const budgetMicrocents = status.budgetCents * 10000;
+  if (
+    status.usedMicrocents + estimatedCostCents * 10000 >=
+    budgetMicrocents
+  ) {
     throw new BudgetExceededError();
   }
   return status;

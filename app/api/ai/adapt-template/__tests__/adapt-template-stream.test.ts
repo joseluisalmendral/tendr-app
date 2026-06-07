@@ -94,7 +94,8 @@ describe("adaptTemplateStreamWith", () => {
   let serviceDb: typeof import("@/db/service")["serviceDb"];
   let adapt: typeof import("../adapt-template-stream")["adaptTemplateStreamWith"];
   let manifestCostFor: typeof import("@/lib/ai/manifest-cost")["manifestCostFor"];
-  let computeCostCents: typeof import("@/lib/ai/compute-cost-cents")["computeCostCents"];
+  let computeCostMicrocents: typeof import("@/lib/ai/compute-cost-microcents")["computeCostMicrocents"];
+  let microcentsToCents: typeof import("@/lib/ai/compute-cost-microcents")["microcentsToCents"];
   let s: typeof import("@/db/schema");
   let templateId: string;
   let clientId: string;
@@ -105,7 +106,9 @@ describe("adaptTemplateStreamWith", () => {
       "../adapt-template-stream"
     ));
     ({ manifestCostFor } = await import("@/lib/ai/manifest-cost"));
-    ({ computeCostCents } = await import("@/lib/ai/compute-cost-cents"));
+    ({ computeCostMicrocents, microcentsToCents } = await import(
+      "@/lib/ai/compute-cost-microcents"
+    ));
     s = await import("@/db/schema");
 
     tenant = await provisionTenant("adapt-template");
@@ -187,13 +190,15 @@ describe("adaptTemplateStreamWith", () => {
     expect(ledger[0].tokensOut).toBe(50);
 
     const cost = await manifestCostFor(serviceDb, "google", ledger[0].modelId);
-    const expectedCents = computeCostCents(
+    // F7c: authoritative micro-cents (no per-call ceil) + dual-written cents.
+    const expectedMicrocents = computeCostMicrocents(
       100,
       50,
       cost?.costPer1kInput ?? 0,
       cost?.costPer1kOutput ?? 0,
     );
-    expect(ledger[0].costCents).toBe(expectedCents);
+    expect(ledger[0].costMicrocents).toBe(expectedMicrocents);
+    expect(ledger[0].costCents).toBe(microcentsToCents(expectedMicrocents));
 
     // HARD-STOP: no template body, no client notes, no generated text in trace.
     const traced = dump();
@@ -278,6 +283,7 @@ describe("adaptTemplateStreamWith", () => {
       tokensIn: 0,
       tokensOut: 0,
       costCents: 5100, // > 5000 default budget
+      costMicrocents: 5100 * 10000, // F7c: gate sums micro-cents
     });
 
     const factory = vi.fn(async () => () => streamingModel());

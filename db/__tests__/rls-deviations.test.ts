@@ -107,6 +107,7 @@ describe("ai_usage_ledger: SELECT + INSERT only", () => {
       tokens_in: 10,
       tokens_out: 5,
       cost_cents: 1,
+      cost_microcents: 10000, // F7c: NOT NULL micro-cents column
     });
     expect(error).toBeNull();
   });
@@ -123,6 +124,7 @@ describe("ai_usage_ledger: SELECT + INSERT only", () => {
         tokens_in: 1,
         tokens_out: 1,
         cost_cents: 1,
+        cost_microcents: 10000, // F7c: NOT NULL micro-cents column
       })
       .select("id")
       .single();

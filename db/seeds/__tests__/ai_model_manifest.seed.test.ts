@@ -19,7 +19,7 @@ import { aiModelManifest } from "@/db/schema";
 process.env.DATABASE_URL ??=
   "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
-const EXPECTED_ACTIVE = 10;
+const EXPECTED_ACTIVE = 11;
 
 function runSeed(): void {
   execSync("pnpm db:seed", {
@@ -97,7 +97,8 @@ describe("ai_model_manifest seed", () => {
     );
 
     // Verified 2026-06-07 against official provider pricing (engram:
-    // sdd/tendr-f7-ai-platform/manifest-research). Any drift here corrupts
+    // sdd/tendr-f7-ai-platform/manifest-research; gemini-2.5-flash via
+    // ai.google.dev/gemini-api/docs/pricing, F7c). Any drift here corrupts
     // assertWithinBudget and ai_usage_ledger cost computation.
     expect(costs).toEqual({
       "gpt-5.5": ["0.005000", "0.030000"],
@@ -107,6 +108,8 @@ describe("ai_model_manifest seed", () => {
       "claude-haiku-4-5": ["0.001000", "0.005000"],
       "gemini-3.1-pro-preview": ["0.002000", "0.012000"],
       "gemini-3.5-flash": ["0.001500", "0.009000"],
+      // F7c: $0.30/1M input, $2.50/1M output -> per-1k.
+      "gemini-2.5-flash": ["0.000300", "0.002500"],
       "deepseek-v4-pro": ["0.000435", "0.000870"],
       "deepseek-v4-flash": ["0.000140", "0.000280"],
       "kimi-k2.6": ["0.000950", "0.004000"],

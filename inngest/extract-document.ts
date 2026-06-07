@@ -22,6 +22,10 @@ import {
   isBudgetExceededError,
 } from "@/lib/ai/cost-budget";
 import {
+  computeCostMicrocents,
+  microcentsToCents,
+} from "@/lib/ai/compute-cost-microcents";
+import {
   getProviderClient,
   ProviderNotConfiguredError,
 } from "@/lib/ai/get-provider-client";
@@ -230,11 +234,15 @@ export async function resolveModelForExtract(
 }
 
 /**
- * Cost in whole cents for a model call, from the manifest per-1k-token costs.
+ * @deprecated F7c finding 1 — the per-call `Math.ceil` over-billed (a real
+ * $0.0133 generation billed as $0.03). Production ledger writes now use
+ * `computeCostMicrocents` (no per-call ceil, USD micro-cents) and dual-write the
+ * legacy `cost_cents` via `microcentsToCents`. Kept only for its existing unit
+ * test; do NOT use for new ledger writes.
  *
+ * Cost in whole cents for a model call, from the manifest per-1k-token costs.
  * Manifest costs are per 1k tokens in USD; multiply by 100 to get cents and
- * round UP so a non-zero usage never bills as 0. Pure so the ledger math is
- * unit-testable.
+ * round UP. Pure so the ledger math is unit-testable.
  */
 export function computeCostCents(
   tokensIn: number,
@@ -536,12 +544,15 @@ export const extractDocument = inngest.createFunction(
     // 5. persist: one transaction — extracted_metadata + usage ledger + job
     //    completed. costCents derived from the manifest costs.
     await step.run("persist", async () => {
-      const costCents = computeCostCents(
+      // F7c: bill in USD micro-cents with NO per-call ceil (Langfuse parity);
+      // dual-write the legacy cost_cents (nearest cent) during the transition.
+      const costMicrocents = computeCostMicrocents(
         extraction.tokensIn,
         extraction.tokensOut,
         route.costPer1kInput,
         route.costPer1kOutput,
       );
+      const costCents = microcentsToCents(costMicrocents);
 
       await serviceDb.transaction(async (tx) => {
         await tx
@@ -557,6 +568,7 @@ export const extractDocument = inngest.createFunction(
           tokensIn: extraction.tokensIn,
           tokensOut: extraction.tokensOut,
           costCents,
+          costMicrocents,
         });
 
         await tx

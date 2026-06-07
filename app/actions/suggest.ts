@@ -6,7 +6,10 @@ import { z } from "zod";
 import type * as schema from "@/db/schema";
 import { aiUsageLedger, cases, clients, notes } from "@/db/schema";
 import { assertWithinBudget, isBudgetExceededError } from "@/lib/ai/cost-budget";
-import { computeCostCents } from "@/lib/ai/compute-cost-cents";
+import {
+  computeCostMicrocents,
+  microcentsToCents,
+} from "@/lib/ai/compute-cost-microcents";
 import {
   getModelForFeature,
   type ModelForFeature,
@@ -188,12 +191,14 @@ export async function suggestWith(
   const inputTokens = result.usage?.inputTokens ?? 0;
   const outputTokens = result.usage?.outputTokens ?? 0;
   const cost = await deps.getManifestCost(deps.db, model.provider, model.modelId);
-  const costCents = computeCostCents(
+  // F7c: USD micro-cents, no per-call ceil. Dual-write legacy cost_cents.
+  const costMicrocents = computeCostMicrocents(
     inputTokens,
     outputTokens,
     cost?.costPer1kInput ?? 0,
     cost?.costPer1kOutput ?? 0,
   );
+  const costCents = microcentsToCents(costMicrocents);
 
   const suggestion = result.text;
 
@@ -206,6 +211,7 @@ export async function suggestWith(
     tokensIn: inputTokens,
     tokensOut: outputTokens,
     costCents,
+    costMicrocents,
   });
 
   generation.update({

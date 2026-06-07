@@ -9,6 +9,7 @@ import {
   type FeatureRequirements,
 } from "@/lib/ai/manifest";
 import { getBudgetStatus } from "@/lib/ai/cost-budget";
+import { formatUsd } from "@/lib/ai/format-usd";
 
 import {
   FeatureModelRow,
@@ -29,9 +30,10 @@ import { ProviderCard, type ProviderId } from "./provider-card";
  * carries an explicit workspaceId tenancy gate.
  *
  * The "Uso del mes" card reads lib/ai/cost-budget.ts (getBudgetStatus) which
- * sums ai_usage_ledger against the UTC month bucket (matching the ledger rollup
- * index) and exposes the 80% warning flag. With no ledger rows it renders the
- * 0 EUR empty state correctly.
+ * sums ai_usage_ledger.cost_microcents against the UTC month bucket (matching
+ * the ledger rollup index) and exposes the 80% warning flag. It renders REAL
+ * USD (F7c finding 1 — the manifest prices and Langfuse are USD, not EUR) with
+ * sub-cent precision; with no ledger rows it shows the $0.00 empty state.
  */
 
 export const dynamic = "force-dynamic";
@@ -72,10 +74,6 @@ const FEATURES: {
     requirements: { requiresPdfOrFallback: true },
   },
 ];
-
-function formatEur(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
 
 export default async function AiSettingsPage() {
   const ws = await getCurrentWorkspace();
@@ -137,7 +135,9 @@ export default async function AiSettingsPage() {
   // Month usage via the budget helper (UTC bucket matches the ledger rollup
   // index expression). Drives the progress bar and the 80% warning surface.
   const budget = await getBudgetStatus(db, workspaceId);
-  const { usedCents, budgetCents, warningThreshold: warning } = budget;
+  const { usedMicrocents, budgetCents, warningThreshold: warning } = budget;
+  // Budget is stored in integer cents; render it in USD micro-cents too.
+  const budgetMicrocents = budgetCents * 10000;
   const percentUsed = Math.round(budget.percentUsed);
 
   return (
@@ -200,7 +200,7 @@ export default async function AiSettingsPage() {
         </div>
         <div className="flex flex-col gap-3 rounded-lg border p-4">
           <p className="text-sm">
-            Has usado {formatEur(usedCents)} EUR de {formatEur(budgetCents)} EUR
+            Has usado {formatUsd(usedMicrocents)} de {formatUsd(budgetMicrocents)}{" "}
             este mes
           </p>
           <div

@@ -185,6 +185,7 @@ describe("summarizeWith", () => {
       tokensIn: 0,
       tokensOut: 0,
       costCents: 5100,
+      costMicrocents: 5100 * 10000, // F7c: gate sums micro-cents
     });
 
     const factory = vi.fn(async () => () => generatingModel(SUMMARY_TEXT));

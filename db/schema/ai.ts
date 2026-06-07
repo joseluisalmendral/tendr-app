@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   bigserial,
   boolean,
   foreignKey,
@@ -151,7 +152,15 @@ export const aiUsageLedger = pgTable(
     modelId: text("model_id").notNull(),
     tokensIn: integer("tokens_in").notNull(),
     tokensOut: integer("tokens_out").notNull(),
+    // Legacy whole-cents cost (F7). KEPT and dual-written during the F7c
+    // transition; a later cleanup migration drops it once all reads use
+    // cost_microcents.
     costCents: integer("cost_cents").notNull(),
+    // F7c: USD * 10000 ($0.0001 granularity), NO per-call ceil — matches
+    // Langfuse. Money stays integer (no float drift in SUM) and the budget gate
+    // compares microcents vs budget_cents * 10000. `bigint` (mode: number) so
+    // a year of usage cannot overflow a 32-bit int.
+    costMicrocents: bigint("cost_microcents", { mode: "number" }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
