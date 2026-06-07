@@ -18,6 +18,14 @@ import {
   jobs,
 } from "@/db/schema";
 import { langfuseSpanProcessor } from "@/lib/observability/instrumentation";
+import {
+  assertWithinBudget,
+  isBudgetExceededError,
+} from "@/lib/ai/cost-budget";
+import {
+  getProviderClient,
+  ProviderNotConfiguredError,
+} from "@/lib/ai/get-provider-client";
 import { extractTextFromPdf } from "@/lib/ai/pdf-parse";
 import {
   resolveExtractionModel,
@@ -87,19 +95,40 @@ type ProgressEntry = { step: string; at: string };
 /**
  * Resolves the provider model client used by the extract step. Injectable so
  * tests can pass an `ai/test` MockLanguageModelV3 instead of a real provider.
- * F6 supports only Google; F7 swaps this for `getProviderClient` (BYO key).
+ *
+ * F7 (PR5): the resolver is ASYNC and threads `workspaceId` so the default
+ * implementation can read the per-workspace BYO key via `getProviderClient`.
+ * The system Google env key is retained ONLY as a fallback when the workspace
+ * has no `ai_provider_configs` row for the route's provider (migration safety:
+ * F6 jobs and tests that never seeded a BYO key keep working off the system
+ * key). The decrypted BYO key never leaves the `getProviderClient` closure.
  */
 export type ResolveModelClient = (
   route: ExtractionModelRoute,
-) => LanguageModel;
+  workspaceId: string,
+) => Promise<LanguageModel>;
 
-const defaultResolveModelClient: ResolveModelClient = (route) => {
-  // F6: system Google key from the environment. F7 replaces this with
-  // getProviderClient(workspaceId, provider) (per-workspace BYO key).
-  const google = createGoogleGenerativeAI({
-    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-  });
-  return google(route.modelId);
+const defaultResolveModelClient: ResolveModelClient = async (
+  route,
+  workspaceId,
+) => {
+  try {
+    // F7: per-workspace BYO key. The plaintext key lives only inside the
+    // returned provider-client closure.
+    const client = await getProviderClient(workspaceId, route.provider);
+    return client(route.modelId);
+  } catch (e) {
+    // Migration fallback: only Google falls back to the system env key when the
+    // workspace has no configured BYO row. Any other provider with no key is a
+    // genuine misconfiguration and must surface.
+    if (e instanceof ProviderNotConfiguredError && route.provider === "google") {
+      const google = createGoogleGenerativeAI({
+        apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+      });
+      return google(route.modelId);
+    }
+    throw e;
+  }
 };
 
 // Module-level seam so tests can swap the model client without Inngest plumbing.
@@ -108,6 +137,14 @@ let resolveModelClient: ResolveModelClient = defaultResolveModelClient;
 /** Test-only: override the model-client resolver (e.g. inject a mock). */
 export function __setResolveModelClient(fn: ResolveModelClient | null): void {
   resolveModelClient = fn ?? defaultResolveModelClient;
+}
+
+/**
+ * Test-only: returns the PRODUCTION default resolver so a test can exercise the
+ * real BYO-key + env-fallback path (not a stub). NOT for production use.
+ */
+export function __getDefaultResolveModelClient(): ResolveModelClient {
+  return defaultResolveModelClient;
 }
 
 /** Appends one progress entry to `jobs.progress` (atomic jsonb concat). */
@@ -127,7 +164,12 @@ async function appendProgress(jobId: string, step: string): Promise<void> {
  */
 async function markJobFailed(
   jobId: string,
-  errorCode: "validation_error" | "provider_error" | "invalid_api_key" | "document_error",
+  errorCode:
+    | "validation_error"
+    | "provider_error"
+    | "invalid_api_key"
+    | "document_error"
+    | "budget_exceeded",
   message: string,
 ): Promise<void> {
   await serviceDb
@@ -139,6 +181,31 @@ async function markJobFailed(
       completedAt: new Date(),
     })
     .where(eq(jobs.id, jobId));
+}
+
+/**
+ * Budget gate for the extract step (F7). Runs BEFORE any model work. An
+ * already-exceeded monthly budget is TERMINAL and non-retriable: retrying this
+ * month cannot succeed, so it marks the job `failed` with a curated
+ * `budget_exceeded` code and throws `NonRetriableError` (no retry burn). Any
+ * other (transient) error from the budget read is rethrown so Inngest retries.
+ *
+ * Exported so a test can drive it against a real local-stack job row + seeded
+ * ledger without the Inngest engine.
+ */
+export async function assertExtractBudget(
+  jobId: string,
+  workspaceId: string,
+): Promise<void> {
+  try {
+    await assertWithinBudget(serviceDb, workspaceId);
+  } catch (e) {
+    if (isBudgetExceededError(e)) {
+      await markJobFailed(jobId, "budget_exceeded", e.message);
+      throw new NonRetriableError(e.message);
+    }
+    throw e;
+  }
 }
 
 /**
@@ -246,6 +313,7 @@ export async function runExtractAttempt(
         documentId,
         feature: EXTRACT_FEATURE,
         provider: route.provider,
+        model: route.modelId,
         inputKind,
         contentLength,
       },
@@ -416,6 +484,9 @@ export const extractDocument = inngest.createFunction(
     //    `runExtractAttempt` so the fail-fast gate (b) can drive it directly
     //    with an injected mock model, without the Inngest engine.
     const extraction = await step.run("extract", async () => {
+      // Budget gate BEFORE any model work (download, decrypt, or call).
+      await assertExtractBudget(jobId, workspaceId);
+
       // Download via the signed URL (the buffer never leaves this step).
       const response = await fetch(signedUrl).catch(() => null);
       if (!response || !response.ok) {
@@ -424,13 +495,17 @@ export const extractDocument = inngest.createFunction(
       }
       const pdfBytes = new Uint8Array(await response.arrayBuffer());
 
+      // F7: resolve the provider model client (BYO key via getProviderClient,
+      // system Google key as migration fallback). Async now (DB read + decrypt).
+      const model = await resolveModelClient(route, workspaceId);
+
       const result = await runExtractAttempt({
         jobId,
         documentId,
         workspaceId,
         route,
         pdfBytes,
-        model: resolveModelClient(route),
+        model,
       });
       await appendProgress(jobId, "extract");
       return result;
