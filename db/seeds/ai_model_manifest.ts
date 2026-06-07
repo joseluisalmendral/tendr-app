@@ -5,8 +5,8 @@ import postgres from "postgres";
 import { aiModelManifest } from "../schema/ai";
 
 /**
- * Seeds the curated ai_model_manifest with the 10 active models Tendr ships
- * with across the 5 supported providers (F7 Block B).
+ * Seeds the curated ai_model_manifest with the 11 active models Tendr ships
+ * with across the 5 supported providers (F7 Block B; F7c added gemini-2.5-flash).
  *
  * Pricing, model ids and capabilities VERIFIED June 2026 against official
  * provider docs + current pricing aggregators (NOT model training data) and
@@ -16,7 +16,9 @@ import { aiModelManifest } from "../schema/ai";
  * - Anthropic: Opus 4.8 $5/$25 (1M ctx); Sonnet 4.6 $3/$15 (1M ctx);
  *   Haiku 4.5 $1/$5 (200K ctx).
  * - Google: Gemini 3.1 Pro (preview) $2/$12 <=200K prompt tier (1M ctx);
- *   Gemini 3.5 Flash $1.50/$9 (~1M ctx) — the free-tier-first DEFAULT per ADR-007.
+ *   Gemini 3.5 Flash $1.50/$9 (~1M ctx) — the free-tier-first DEFAULT per ADR-007;
+ *   Gemini 2.5 Flash $0.30/$2.50 (1M ctx) — F7c re-activation, independent free
+ *   RPD quota, NOT a default.
  * - DeepSeek: V4 Pro $0.435/$0.87; V4 Flash $0.14/$0.28 (both 1M ctx, text-only).
  * - Moonshot: Kimi K2.6 $0.95/$4.00 cache-miss (262K ctx, multimodal, no PDF).
  *
@@ -149,6 +151,27 @@ const MODELS: (typeof aiModelManifest.$inferInsert)[] = [
     maxInputTokens: 1048576,
     costPer1kInput: "0.001500",
     costPer1kOutput: "0.009000",
+  },
+  {
+    // F7c: re-activated by user choice — its free-tier RPD quota is independent
+    // of gemini-3.5-flash's, so one Google key gets a second daily allowance.
+    // NOT a default (3.5-flash stays the default per ADR-007).
+    // Verified 2026-06-07 against ai.google.dev/gemini-api/docs/pricing:
+    //   Paid Tier per 1M tokens: input $0.30 (text/image/video; $1.00 audio),
+    //   output $2.50 (including thinking tokens). 1M-token context window,
+    //   hybrid reasoning model. Per-1k = per-1M / 1000.
+    provider: "google",
+    modelId: "gemini-2.5-flash",
+    displayName: "Gemini 2.5 Flash",
+    status: "active",
+    defaultForFeatures: [],
+    supportsMultimodal: true,
+    supportsPdf: true, // PDF via document/image tokens (Gemini multimodal)
+    supportsImage: true,
+    supportsStreaming: true,
+    maxInputTokens: 1048576,
+    costPer1kInput: "0.000300",
+    costPer1kOutput: "0.002500",
   },
   // ── DeepSeek ──────────────────────────────────────────────────────────────
   {
