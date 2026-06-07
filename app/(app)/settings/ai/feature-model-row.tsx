@@ -5,13 +5,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { setFeatureModel } from "@/app/actions/ai-settings";
+import { clearFeatureModel, setFeatureModel } from "@/app/actions/ai-settings";
 import {
   Select,
   SelectContent,
   SelectGroup,
   SelectItem,
   SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -46,6 +47,16 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
 };
 
 /**
+ * Sentinel Select value for the "Default" option (F7c finding 4a). Choosing it
+ * calls `clearFeatureModel`, which DELETEs the override so `getModelForFeature`
+ * falls back to the manifest default (gemini-3.5-flash). It can't collide with a
+ * real `provider:modelId` value because no provider id contains a colon-prefix
+ * underscore pair like this.
+ */
+const DEFAULT_OPTION = "__default__";
+const DEFAULT_OPTION_LABEL = "Default (gemini-3.5-flash)";
+
+/**
  * Per-feature model Select row. Renders the per-provider options the page
  * resolved via getAvailableModels (PR2). Ineligible models are DISABLED with a
  * native `title` tooltip stating the reason (never hidden — design §9). onChange
@@ -73,23 +84,36 @@ export function FeatureModelRow({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  // No override -> the feature is on the manifest default, so the Select shows
+  // the "Default" sentinel rather than an empty placeholder.
   const [value, setValue] = useState<string>(
     currentProvider && currentModelId
       ? `${currentProvider}:${currentModelId}`
-      : "",
+      : DEFAULT_OPTION,
   );
 
   function handleChange(next: string) {
     setValue(next);
-    const [provider, modelId] = next.split(":");
     startTransition(async () => {
-      const result = await setFeatureModel({
-        feature,
-        provider: provider as ProviderId,
-        modelId,
-      });
+      // "Default" clears the override (falls back to the manifest default);
+      // any other value sets an explicit provider:modelId override.
+      const result =
+        next === DEFAULT_OPTION
+          ? await clearFeatureModel({ feature })
+          : await (async () => {
+              const [provider, modelId] = next.split(":");
+              return setFeatureModel({
+                feature,
+                provider: provider as ProviderId,
+                modelId,
+              });
+            })();
       if (result.ok) {
-        toast.success("Modelo actualizado");
+        toast.success(
+          next === DEFAULT_OPTION
+            ? "Volviste al modelo por defecto"
+            : "Modelo actualizado",
+        );
         router.refresh();
       } else {
         toast.error(result.error);
@@ -115,6 +139,12 @@ export function FeatureModelRow({
           />
         </SelectTrigger>
         <SelectContent>
+          <SelectGroup>
+            <SelectItem value={DEFAULT_OPTION}>
+              {DEFAULT_OPTION_LABEL}
+            </SelectItem>
+          </SelectGroup>
+          <SelectSeparator />
           {configuredProviders.map((provider) => {
             const models = options[provider] ?? [];
             if (models.length === 0) return null;

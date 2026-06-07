@@ -9,6 +9,12 @@ import {
   type SaveProviderKeyResult,
 } from "@/app/(app)/settings/ai/save-provider-key";
 import {
+  clearFeatureModelWith,
+  clearFeatureModelSchema,
+  type ClearFeatureModelInput,
+  type ClearFeatureModelResult,
+} from "@/app/(app)/settings/ai/clear-feature-model";
+import {
   deleteProviderKeyWith,
   deleteProviderKeySchema,
   type DeleteProviderKeyInput,
@@ -28,6 +34,7 @@ import { validateProviderKey } from "@/lib/ai/validate-provider-key";
 export type { SaveProviderKeyResult } from "@/app/(app)/settings/ai/save-provider-key";
 export type { SetFeatureModelResult } from "@/app/(app)/settings/ai/set-feature-model";
 export type { DeleteProviderKeyResult } from "@/app/(app)/settings/ai/delete-provider-key";
+export type { ClearFeatureModelResult } from "@/app/(app)/settings/ai/clear-feature-model";
 
 /**
  * Thin `"use server"` wrappers for the /settings/ai key + feature-model actions.
@@ -125,6 +132,38 @@ export async function deleteProviderKey(
 
   const result = await deleteProviderKeyWith(
     { serviceDb },
+    resolved.workspaceId,
+    parsed.data,
+    resolved.actorId,
+  );
+
+  if (result.ok) {
+    revalidatePath("/settings/ai");
+  }
+
+  return result;
+}
+
+/**
+ * Clears a feature's model override so it falls back to the manifest default
+ * (gemini-3.5-flash). Backs the "Default" option in each feature Select
+ * (decision #775 finding 4a). No-op safe when no override exists.
+ */
+export async function clearFeatureModel(
+  input: ClearFeatureModelInput,
+): Promise<ClearFeatureModelResult> {
+  const resolved = await resolveWorkspaceActor();
+  if (!resolved) {
+    return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  }
+
+  const parsed = clearFeatureModelSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Selección inválida." };
+  }
+
+  const result = await clearFeatureModelWith(
+    { db, serviceDb },
     resolved.workspaceId,
     parsed.data,
     resolved.actorId,
