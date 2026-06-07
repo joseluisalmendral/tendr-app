@@ -78,4 +78,38 @@ describe("ai_model_manifest seed", () => {
       ["adapt_template", "extract_document", "suggest", "summarize"].sort(),
     );
   });
+
+  it("seeds the verified per-1K costs for every active model (budget gate + ledger depend on these)", async () => {
+    runSeed();
+    const rows = await db
+      .select({
+        modelId: aiModelManifest.modelId,
+        input: aiModelManifest.costPer1kInput,
+        output: aiModelManifest.costPer1kOutput,
+      })
+      .from(aiModelManifest)
+      .where(
+        sql`${aiModelManifest.status} = 'active' and ${aiModelManifest.deprecatedAt} is null`,
+      );
+
+    const costs = Object.fromEntries(
+      rows.map((r) => [r.modelId, [r.input, r.output]]),
+    );
+
+    // Verified 2026-06-07 against official provider pricing (engram:
+    // sdd/tendr-f7-ai-platform/manifest-research). Any drift here corrupts
+    // assertWithinBudget and ai_usage_ledger cost computation.
+    expect(costs).toEqual({
+      "gpt-5.5": ["0.005000", "0.030000"],
+      "gpt-5.4-mini": ["0.000750", "0.004500"],
+      "claude-opus-4-8": ["0.005000", "0.025000"],
+      "claude-sonnet-4-6": ["0.003000", "0.015000"],
+      "claude-haiku-4-5": ["0.001000", "0.005000"],
+      "gemini-3.1-pro-preview": ["0.002000", "0.012000"],
+      "gemini-3.5-flash": ["0.001500", "0.009000"],
+      "deepseek-v4-pro": ["0.000435", "0.000870"],
+      "deepseek-v4-flash": ["0.000140", "0.000280"],
+      "kimi-k2.6": ["0.000950", "0.004000"],
+    });
+  });
 });
