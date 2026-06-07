@@ -17,12 +17,25 @@ import {
   type TemplateMutationResult,
   type UpdateTemplateInput,
 } from "./template-crud";
+import {
+  deleteAdaptationWith,
+  listAdaptations,
+  type AdaptationDeleteResult,
+  type AdaptationRow,
+  type DeleteAdaptationInput,
+  type ListAdaptationsInput,
+} from "./adaptations-crud";
 
 export type {
   TemplateMutationResult,
   TemplateDeleteResult,
   TemplateRow,
 } from "./template-crud";
+
+export type {
+  AdaptationRow,
+  AdaptationDeleteResult,
+} from "./adaptations-crud";
 
 /**
  * Thin `"use server"` wrappers for the /templates CRUD actions plus a small
@@ -75,6 +88,35 @@ export async function deleteTemplate(
   if (!workspaceId) return { ok: false, error: SESSION_ERROR };
 
   const result = await deleteTemplateWith({ db }, workspaceId, input);
+  if (result.ok) revalidatePath("/templates");
+  return result;
+}
+
+/**
+ * Lists the persisted adaptations for a (template, client) pair in the resolved
+ * workspace, newest-first. The adapt dialog (PR-F7C-3b) calls this to render the
+ * history + copy button. Returns an empty list defensively when there is no
+ * session.
+ */
+export async function listAdaptationsAction(
+  input: ListAdaptationsInput,
+): Promise<AdaptationRow[]> {
+  const workspaceId = await resolveWorkspaceId();
+  if (!workspaceId) return [];
+  return listAdaptations({ db }, workspaceId, input);
+}
+
+/**
+ * Deletes one persisted adaptation, ownership-gated by the resolved workspace.
+ * Revalidates /templates on success so the history reflects the removal.
+ */
+export async function deleteAdaptationAction(
+  input: DeleteAdaptationInput,
+): Promise<AdaptationDeleteResult> {
+  const workspaceId = await resolveWorkspaceId();
+  if (!workspaceId) return { ok: false, error: SESSION_ERROR };
+
+  const result = await deleteAdaptationWith({ db }, workspaceId, input);
   if (result.ok) revalidatePath("/templates");
   return result;
 }

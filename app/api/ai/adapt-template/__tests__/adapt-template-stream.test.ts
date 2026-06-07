@@ -55,12 +55,19 @@ function recordingTrace(): {
   return { trace, dump: () => JSON.stringify(records) };
 }
 
-/** A streaming mock that emits two text deltas then a finish with usage. */
-function streamingModel(): MockLanguageModelV3 {
+/**
+ * A streaming mock that emits two text deltas then a finish with usage.
+ * `capture` (optional) records the full prompt the seam sent to the MODEL so a
+ * test can assert the enriched personalization (notes/cases/instructions)
+ * reaches the model — these are exactly what must NOT appear in the trace.
+ */
+function streamingModel(capture?: (input: string) => void): MockLanguageModelV3 {
   return new MockLanguageModelV3({
     provider: "mock",
     modelId: "mock-stream",
-    doStream: async () => ({
+    doStream: async (options) => {
+      capture?.(JSON.stringify(options.prompt));
+      return {
       stream: simulateReadableStream({
         chunks: [
           { type: "stream-start" as const, warnings: [] },
@@ -78,7 +85,8 @@ function streamingModel(): MockLanguageModelV3 {
           },
         ],
       }),
-    }),
+      };
+    },
   });
 }
 
@@ -132,6 +140,22 @@ describe("adaptTemplateStreamWith", () => {
       })
       .returning({ id: s.clients.id });
     clientId = cli.id;
+
+    // Active case (must reach the model prompt) + closed case (must NOT).
+    await serviceDb.insert(s.cases).values([
+      {
+        workspaceId: tenant.workspaceId,
+        clientId,
+        title: "SECRET-ACTIVE-CASE migración CRM",
+        status: "active",
+      },
+      {
+        workspaceId: tenant.workspaceId,
+        clientId,
+        title: "SECRET-CLOSED-CASE proyecto viejo",
+        status: "closed_won",
+      },
+    ]);
   });
 
   afterAll(async () => {
@@ -139,7 +163,10 @@ describe("adaptTemplateStreamWith", () => {
   });
 
   afterEach(async () => {
-    // Clear ledger + any feature mapping between cases.
+    // Clear ledger + persisted adaptations + any feature mapping between cases.
+    await serviceDb
+      .delete(s.templateAdaptations)
+      .where(eq(s.templateAdaptations.workspaceId, tenant.workspaceId));
     await serviceDb
       .delete(s.aiUsageLedger)
       .where(eq(s.aiUsageLedger.workspaceId, tenant.workspaceId));
@@ -154,7 +181,10 @@ describe("adaptTemplateStreamWith", () => {
   });
 
   it("configured default: streams + inserts ledger row with real cost; trace omits PII", async () => {
-    const model = streamingModel();
+    let modelInput = "";
+    const model = streamingModel((input) => {
+      modelInput = input;
+    });
     const factory = vi.fn(async () => () => model);
     const { trace, dump } = recordingTrace();
 
@@ -166,7 +196,7 @@ describe("adaptTemplateStreamWith", () => {
         trace,
       },
       tenant.workspaceId,
-      { templateId, clientId },
+      { templateId, clientId, extraInstructions: "SECRET-EXTRA-INSTRUCTION usa un tono cercano" },
     );
 
     expect(result.ok).toBe(true);
@@ -174,6 +204,29 @@ describe("adaptTemplateStreamWith", () => {
 
     const text = await drain(result.stream.textStream);
     expect(text).toBe("Hola adaptado.");
+
+    // ENRICHED PROMPT: notes_summary + the ACTIVE case + extra instructions all
+    // reach the MODEL. The closed case does NOT.
+    expect(modelInput).toContain("SECRET-CLIENT-NOTES");
+    expect(modelInput).toContain("SECRET-ACTIVE-CASE");
+    expect(modelInput).toContain("SECRET-EXTRA-INSTRUCTION");
+    expect(modelInput).not.toContain("SECRET-CLOSED-CASE");
+
+    // AUTOMATIC PERSIST: the completed adaptation is stored linked to
+    // (workspace, template, client) with the full result + provenance.
+    const adaptations = await serviceDb
+      .select()
+      .from(s.templateAdaptations)
+      .where(eq(s.templateAdaptations.workspaceId, tenant.workspaceId));
+    expect(adaptations).toHaveLength(1);
+    expect(adaptations[0].templateId).toBe(templateId);
+    expect(adaptations[0].clientId).toBe(clientId);
+    expect(adaptations[0].resultText).toBe("Hola adaptado.");
+    expect(adaptations[0].extraInstructions).toBe(
+      "SECRET-EXTRA-INSTRUCTION usa un tono cercano",
+    );
+    expect(adaptations[0].provider).toBe("google");
+    expect(adaptations[0].modelId).toBeTruthy();
 
     // Resolved via the manifest default (gemini-3.5-flash, ADR-007).
     expect(factory).toHaveBeenCalledWith(tenant.workspaceId, "google");
@@ -200,14 +253,48 @@ describe("adaptTemplateStreamWith", () => {
     expect(ledger[0].costMicrocents).toBe(expectedMicrocents);
     expect(ledger[0].costCents).toBe(microcentsToCents(expectedMicrocents));
 
-    // HARD-STOP: no template body, no client notes, no generated text in trace.
+    // HARD-STOP: no template body, no client notes, no cases text, no extra
+    // instructions, no generated text in trace — ONLY lengths/counts/ids.
     const traced = dump();
     expect(traced).not.toContain("SECRET-TEMPLATE-BODY");
     expect(traced).not.toContain("SECRET-CLIENT-NOTES");
+    expect(traced).not.toContain("SECRET-ACTIVE-CASE");
+    expect(traced).not.toContain("SECRET-CLOSED-CASE");
+    expect(traced).not.toContain("SECRET-EXTRA-INSTRUCTION");
     expect(traced).not.toContain("adaptado.");
-    // Metadata-only fields ARE present.
+    // Metadata-only fields ARE present (lengths + counts).
     expect(traced).toContain("templateLength");
+    expect(traced).toContain("notesSummaryLength");
+    expect(traced).toContain("activeCasesCount");
+    expect(traced).toContain("extraInstructionsLength");
     expect(traced).toContain("adapt_template");
+  });
+
+  it("extra_instructions over the max length: validation_error, no model call, no persist", async () => {
+    const factory = vi.fn(async () => () => streamingModel());
+    const { trace } = recordingTrace();
+
+    const result = await adapt(
+      {
+        db: serviceDb,
+        getProviderClient: factory,
+        getManifestCost: manifestCostFor,
+        trace,
+      },
+      tenant.workspaceId,
+      { templateId, clientId, extraInstructions: "x".repeat(2001) },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errorCode).toBe("validation_error");
+    expect(factory).not.toHaveBeenCalled();
+
+    const adaptations = await serviceDb
+      .select()
+      .from(s.templateAdaptations)
+      .where(eq(s.templateAdaptations.workspaceId, tenant.workspaceId));
+    expect(adaptations).toHaveLength(0);
   });
 
   it("no provider key configured: returns NO_KEY_CONFIGURED, no stream, no ledger", async () => {
