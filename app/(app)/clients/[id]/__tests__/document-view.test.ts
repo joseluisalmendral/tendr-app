@@ -84,8 +84,13 @@ describe("errorMessageFor — failed job always has an actionable message", () =
       errorMessageFor({ error_code: "invalid_api_key" }),
       errorMessageFor({ error_code: "document_error" }),
     ];
+    // Explicit voseo forms seen or likely in this copy surface. A generic
+    // accented-ending regex false-positives on neutral words ("más", "falló")
+    // because JS \b is ASCII-only — keep this a curated list.
+    const voseoForms =
+      /Volvé|Verificá|Elegí|Subí|Hacé|Probá|Mirá|Tenés|Podés|Querés/;
     for (const msg of messages) {
-      expect(msg).not.toContain("Volvé");
+      expect(msg).not.toMatch(voseoForms);
     }
     // The neutral form is present where the voseo one used to be.
     expect(errorMessageFor({ error_code: "provider_error" })).toContain(

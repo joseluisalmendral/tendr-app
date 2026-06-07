@@ -32,9 +32,13 @@ import { isTerminalStatus, type JobStatus } from "./use-job";
  *     running job.
  *
  * Tenancy: every read/delete is scoped by the explicit `workspaceId` the seam
- * was given (defense in depth alongside the `documents_delete_own_workspace` /
- * `documents_objects_delete_own_workspace` RLS policies). A cross-workspace id
- * therefore resolves to no row and is refused before any destructive call.
+ * was given. For the documents-ROW delete this explicit filter is the PRIMARY
+ * tenancy gate: the Drizzle `db` connection is privileged in practice (the
+ * pooler connection string bypasses RLS), so `documents_delete_own_workspace`
+ * cannot be relied on here. The Storage object removal DOES go through the
+ * user-session Supabase client, where `documents_objects_delete_own_workspace`
+ * RLS applies. A cross-workspace id therefore resolves to no row and is
+ * refused before any destructive call.
  */
 
 export interface DeleteDocumentDeps {

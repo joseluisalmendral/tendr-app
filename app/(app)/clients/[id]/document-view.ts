@@ -70,7 +70,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   provider_error:
     "El servicio de extracción falló. Vuelve a intentarlo más tarde.",
   invalid_api_key: "La clave del proveedor de IA no es válida.",
-  document_error: "No se pudo leer el documento. Verificá que el PDF sea válido.",
+  document_error: "No se pudo leer el documento. Verifica que el PDF sea válido.",
 };
 
 const DEFAULT_ERROR_MESSAGE =
