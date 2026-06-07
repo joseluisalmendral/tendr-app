@@ -20,12 +20,14 @@ import {
 } from "@/db/__tests__/setup";
 import {
   assertExtractBudget,
+  resolveModelForExtract,
   __setResolveModelClient,
 } from "@/inngest/extract-document";
 import {
   __setProviderFactory,
   type AiProvider,
 } from "@/lib/ai/get-provider-client";
+import { AiProviderError } from "@/lib/ai/provider-errors";
 import { encryptProviderKey } from "@/lib/crypto/envelope";
 import type { ExtractionModelRoute } from "@/lib/ai/route-extraction-model";
 
@@ -38,8 +40,10 @@ import type { ExtractionModelRoute } from "@/lib/ai/route-extraction-model";
  *   1. the F7 ASYNC, workspaceId-threaded `defaultResolveModelClient` BYO path —
  *      a stored envelope is decrypted via getProviderClient and a model client
  *      is built (mock provider factory: no real SDK key call / network);
- *   2. the env-Google MIGRATION FALLBACK — a workspace with NO BYO google row
- *      still resolves a client off the system key (so F6 jobs keep working);
+ *   2. the NO-BYO-KEY TERMINAL failure — a workspace with NO configured BYO row
+ *      for the route's provider has NO env-key fallback: `resolveModelForExtract`
+ *      marks the job `failed` with `error_code='no_key_configured'` and throws a
+ *      NonRetriableError (no retry burn, no model call);
  *   3. the BUDGET GATE — an already-exceeded monthly budget is TERMINAL: the job
  *      is failed with `error_code='budget_exceeded'` and a NonRetriableError is
  *      thrown (no retry burn); under budget the gate passes.
@@ -60,7 +64,6 @@ const GOOGLE_ROUTE: ExtractionModelRoute = {
 };
 
 let priorKek: string | undefined;
-let priorGoogleEnv: string | undefined;
 let tenant: Tenant;
 
 async function seedProviderConfig(
@@ -96,8 +99,6 @@ async function makeJob(workspaceId: string): Promise<string> {
 beforeAll(async () => {
   priorKek = process.env.AI_KEY_KEK;
   process.env.AI_KEY_KEK = TEST_KEK;
-  priorGoogleEnv = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  process.env.GOOGLE_GENERATIVE_AI_API_KEY = "fake-system-google-key";
   tenant = await provisionTenant("extract-byo");
 });
 
@@ -113,9 +114,6 @@ afterAll(async () => {
   await teardownTenants(tenant);
   if (priorKek === undefined) delete process.env.AI_KEY_KEK;
   else process.env.AI_KEY_KEK = priorKek;
-  if (priorGoogleEnv === undefined)
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  else process.env.GOOGLE_GENERATIVE_AI_API_KEY = priorGoogleEnv;
 });
 
 afterEach(async () => {
@@ -165,18 +163,44 @@ describe("extractor model resolution (F7 BYO key path)", () => {
     expect(receivedKey).toBe(PLAINTEXT_KEY);
   });
 
-  it("falls back to the system Google env key when the workspace has no BYO google row", async () => {
+  it("no BYO key: terminal no_key_configured failure, NonRetriableError, no model call", async () => {
     // No provider config seeded for this workspace -> ProviderNotConfiguredError
-    // inside getProviderClient -> google env fallback path.
-    const { __getDefaultResolveModelClient } = await import(
-      "@/inngest/extract-document"
-    );
-    const resolve = __getDefaultResolveModelClient();
-    const model = await resolve(GOOGLE_ROUTE, tenant.workspaceId);
+    // inside getProviderClient. There is NO env-key fallback: the job must fail
+    // terminally with the curated NO_KEY_CONFIGURED taxonomy message and NEVER
+    // build a model client.
+    let factoryCalled = false;
+    __setProviderFactory(() => {
+      factoryCalled = true;
+      return () =>
+        new MockLanguageModelV3({ provider: "mock", modelId: "mock" });
+    });
 
-    // The fallback builds a real Google client off the system env key; we only
-    // assert a model object was produced (no network call happens here).
-    expect(model).toBeTruthy();
+    const jobId = await makeJob(tenant.workspaceId);
+
+    await expect(
+      resolveModelForExtract(jobId, GOOGLE_ROUTE, tenant.workspaceId),
+    ).rejects.toBeInstanceOf(NonRetriableError);
+
+    // No model client was ever built (the factory was never reached).
+    expect(factoryCalled).toBe(false);
+
+    const [row] = await serviceDb
+      .select({ status: jobs.status, result: jobs.result })
+      .from(jobs)
+      .where(eq(jobs.id, jobId))
+      .limit(1);
+    expect(row.status).toBe("failed");
+    const result = row.result as {
+      error_code?: string;
+      message?: string;
+    } | null;
+    expect(result?.error_code).toBe("no_key_configured");
+    // Curated taxonomy message — single source of truth in provider-errors.ts.
+    expect(result?.message).toBe(
+      new AiProviderError("NO_KEY_CONFIGURED").message,
+    );
+
+    await serviceDb.delete(jobs).where(eq(jobs.id, jobId));
   });
 });
 

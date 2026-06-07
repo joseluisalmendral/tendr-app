@@ -1,4 +1,3 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { startObservation } from "@langfuse/tracing";
 import {
   generateObject,
@@ -26,6 +25,7 @@ import {
   getProviderClient,
   ProviderNotConfiguredError,
 } from "@/lib/ai/get-provider-client";
+import { AiProviderError } from "@/lib/ai/provider-errors";
 import { extractTextFromPdf } from "@/lib/ai/pdf-parse";
 import {
   resolveExtractionModel,
@@ -47,9 +47,11 @@ import { inngest, type DocumentsExtractEventData } from "./client";
  * it never runs in client-reachable code.
  *
  * Error taxonomy (written to `jobs.result.error_code`): validation_error |
- * provider_error | invalid_api_key | document_error. A schema-validation
- * failure is fail-fast (NonRetriableError, no retry burn); provider errors are
- * retried up to 3 times before onFailure records the terminal failure.
+ * provider_error | invalid_api_key | document_error | budget_exceeded |
+ * no_key_configured. A schema-validation failure is fail-fast (NonRetriableError,
+ * no retry burn); an exceeded budget or a missing BYO key are likewise terminal
+ * and non-retriable; provider errors are retried up to 3 times before onFailure
+ * records the terminal failure.
  *
  * OBSERVABILITY: the Langfuse trace carries METADATA ONLY — workspace id,
  * document id, feature, provider, input kind/length, token usage. The PDF
@@ -97,11 +99,11 @@ type ProgressEntry = { step: string; at: string };
  * tests can pass an `ai/test` MockLanguageModelV3 instead of a real provider.
  *
  * F7 (PR5): the resolver is ASYNC and threads `workspaceId` so the default
- * implementation can read the per-workspace BYO key via `getProviderClient`.
- * The system Google env key is retained ONLY as a fallback when the workspace
- * has no `ai_provider_configs` row for the route's provider (migration safety:
- * F6 jobs and tests that never seeded a BYO key keep working off the system
- * key). The decrypted BYO key never leaves the `getProviderClient` closure.
+ * implementation reads the per-workspace BYO key via `getProviderClient`. There
+ * is NO system env-key fallback: a workspace with no `ai_provider_configs` row
+ * for the route's provider is a genuine misconfiguration that must surface as a
+ * TERMINAL `NO_KEY_CONFIGURED` job failure (see the `extract` step handler).
+ * The decrypted BYO key never leaves the `getProviderClient` closure.
  */
 export type ResolveModelClient = (
   route: ExtractionModelRoute,
@@ -112,23 +114,11 @@ const defaultResolveModelClient: ResolveModelClient = async (
   route,
   workspaceId,
 ) => {
-  try {
-    // F7: per-workspace BYO key. The plaintext key lives only inside the
-    // returned provider-client closure.
-    const client = await getProviderClient(workspaceId, route.provider);
-    return client(route.modelId);
-  } catch (e) {
-    // Migration fallback: only Google falls back to the system env key when the
-    // workspace has no configured BYO row. Any other provider with no key is a
-    // genuine misconfiguration and must surface.
-    if (e instanceof ProviderNotConfiguredError && route.provider === "google") {
-      const google = createGoogleGenerativeAI({
-        apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-      });
-      return google(route.modelId);
-    }
-    throw e;
-  }
+  // F7: per-workspace BYO key only. The plaintext key lives solely inside the
+  // returned provider-client closure. `ProviderNotConfiguredError` (no BYO row)
+  // propagates to the `extract` step, which converts it to a terminal failure.
+  const client = await getProviderClient(workspaceId, route.provider);
+  return client(route.modelId);
 };
 
 // Module-level seam so tests can swap the model client without Inngest plumbing.
@@ -141,7 +131,8 @@ export function __setResolveModelClient(fn: ResolveModelClient | null): void {
 
 /**
  * Test-only: returns the PRODUCTION default resolver so a test can exercise the
- * real BYO-key + env-fallback path (not a stub). NOT for production use.
+ * real BYO-key path (not a stub) — including the no-BYO-key
+ * `ProviderNotConfiguredError`. NOT for production use.
  */
 export function __getDefaultResolveModelClient(): ResolveModelClient {
   return defaultResolveModelClient;
@@ -169,7 +160,8 @@ async function markJobFailed(
     | "provider_error"
     | "invalid_api_key"
     | "document_error"
-    | "budget_exceeded",
+    | "budget_exceeded"
+    | "no_key_configured",
   message: string,
 ): Promise<void> {
   await serviceDb
@@ -203,6 +195,35 @@ export async function assertExtractBudget(
     if (isBudgetExceededError(e)) {
       await markJobFailed(jobId, "budget_exceeded", e.message);
       throw new NonRetriableError(e.message);
+    }
+    throw e;
+  }
+}
+
+/**
+ * Resolves the model client for the extract step, converting a missing BYO key
+ * into a TERMINAL, non-retriable failure (F7). There is NO system env-key
+ * fallback: a workspace with no `ai_provider_configs` row for the route's
+ * provider raises `ProviderNotConfiguredError`, which a retry cannot fix, so the
+ * job is marked `failed` with the curated `no_key_configured` taxonomy code +
+ * message and a `NonRetriableError` is thrown (no retry burn, no model call).
+ * Any other error from the resolver is rethrown so Inngest's `retries` apply.
+ *
+ * Exported so a test can drive it against a real local-stack job row without the
+ * Inngest engine (mirrors `assertExtractBudget`).
+ */
+export async function resolveModelForExtract(
+  jobId: string,
+  route: ExtractionModelRoute,
+  workspaceId: string,
+): Promise<LanguageModel> {
+  try {
+    return await resolveModelClient(route, workspaceId);
+  } catch (e) {
+    if (e instanceof ProviderNotConfiguredError) {
+      const curated = new AiProviderError("NO_KEY_CONFIGURED").message;
+      await markJobFailed(jobId, "no_key_configured", curated);
+      throw new NonRetriableError(curated);
     }
     throw e;
   }
@@ -495,9 +516,10 @@ export const extractDocument = inngest.createFunction(
       }
       const pdfBytes = new Uint8Array(await response.arrayBuffer());
 
-      // F7: resolve the provider model client (BYO key via getProviderClient,
-      // system Google key as migration fallback). Async now (DB read + decrypt).
-      const model = await resolveModelClient(route, workspaceId);
+      // F7: resolve the provider model client (BYO key via getProviderClient).
+      // Async now (DB read + decrypt). A missing BYO key is a TERMINAL,
+      // non-retriable NO_KEY_CONFIGURED failure (handled inside the helper).
+      const model = await resolveModelForExtract(jobId, route, workspaceId);
 
       const result = await runExtractAttempt({
         jobId,
