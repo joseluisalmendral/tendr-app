@@ -111,6 +111,21 @@ export function resolveDocumentView(
   return hasExtractedMetadata ? "extracted" : "idle";
 }
 
+/**
+ * Decides whether a document row should render EXPANDED on first paint, based on
+ * its server-loaded latest-job status. A `pending`/`running` job auto-expands so
+ * live extraction progress is visible without a click (design fork 3); every
+ * terminal status (`completed`/`failed`) and `null` (no job) starts collapsed to
+ * keep a multi-document client scannable.
+ *
+ * This is the SEED only — once mounted, the user's toggle wins; live status
+ * transitions do NOT force re-expand/collapse. Pure so it is unit-testable
+ * without a DOM, matching the document-view.ts convention.
+ */
+export function shouldAutoExpand(status: JobStatus | null): boolean {
+  return status === "pending" || status === "running";
+}
+
 /** Narrow unknown extracted metadata to the extraction contract, defensively. */
 export function asExtractionResult(value: unknown): ExtractionResult | null {
   if (!value || typeof value !== "object") return null;

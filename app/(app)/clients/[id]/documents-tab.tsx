@@ -3,7 +3,10 @@
 import { useRef, useState, useTransition } from "react";
 
 import {
+  CaretDownIcon,
+  CaretUpIcon,
   CheckCircleIcon,
+  EyeIcon,
   FileTextIcon,
   SpinnerGapIcon,
   TrashIcon,
@@ -40,13 +43,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ExtractionResult } from "@/inngest/extract-document";
 
-import { deleteDocument, uploadDocument } from "./actions";
+import {
+  deleteDocument,
+  getDocumentSignedUrl,
+  uploadDocument,
+} from "./actions";
 import { canDeleteDocument } from "./delete-document";
 import {
   asExtractionResult,
   deriveSteps,
   errorMessageFor,
   resolveDocumentView,
+  shouldAutoExpand,
 } from "./document-view";
 import { useJob, type JobStatus } from "./use-job";
 
@@ -281,6 +289,128 @@ function DeleteDocumentButton({
   );
 }
 
+/**
+ * Compact status chip shown in a row's header so a COLLAPSED row still
+ * communicates its live state without expanding. Driven by the same `status`
+ * (live ?? server) the card already computes, so a collapsed active row's chip
+ * keeps updating while its detail body is hidden (useJob stays mounted).
+ */
+function StatusChip({ status }: { status: JobStatus | null }) {
+  if (status === "pending" || status === "running") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+        <SpinnerGapIcon className="size-3 animate-spin" />
+        Procesando
+      </span>
+    );
+  }
+  if (status === "completed") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+        <CheckCircleIcon weight="fill" className="size-3" />
+        Listo
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+        <WarningCircleIcon weight="fill" className="size-3" />
+        Error
+      </span>
+    );
+  }
+  return null;
+}
+
+/**
+ * Per-row PDF preview. Opens a modal and signs the document's download URL ON
+ * OPEN (never at list render, so URLs are fresh and absent from the initial
+ * HTML — ADR-4). The signed URL is component-local and re-fetched every open
+ * (1h TTL). Three states: loading (spinner), error (neutral-Spanish retry copy,
+ * never a hung blank view), ready (iframe embed). A signing failure — including
+ * a cross-workspace id blocked by RLS — lands in the error state.
+ */
+function DocumentPreviewDialog({
+  documentId,
+  filename,
+}: {
+  documentId: string;
+  filename: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, startTransition] = useTransition();
+
+  const PREVIEW_ERROR = "No se pudo abrir el documento. Vuelve a intentarlo.";
+
+  // Sign ON OPEN (event-driven, not in an effect): a fresh 1h URL is fetched
+  // each time the dialog opens, and transient state is dropped on close so
+  // nothing persistent is created or revoked.
+  function onOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) {
+      setUrl(null);
+      setError(null);
+      return;
+    }
+    setUrl(null);
+    setError(null);
+    startTransition(async () => {
+      try {
+        const result = await getDocumentSignedUrl(documentId);
+        if (result.ok) {
+          setUrl(result.url);
+        } else {
+          setError(PREVIEW_ERROR);
+        }
+      } catch {
+        setError(PREVIEW_ERROR);
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Ver PDF"
+        >
+          <EyeIcon className="text-muted-foreground" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="truncate">{filename}</DialogTitle>
+          <DialogDescription>Vista previa del documento.</DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="flex h-[70vh] w-full items-center justify-center rounded-md border text-sm text-muted-foreground">
+            <SpinnerGapIcon className="mr-2 size-4 animate-spin" />
+            Cargando documento…
+          </div>
+        ) : error ? (
+          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            <WarningCircleIcon weight="fill" className="mt-0.5 size-4 shrink-0" />
+            <p>{error}</p>
+          </div>
+        ) : url ? (
+          <iframe
+            src={url}
+            title={filename}
+            className="h-[70vh] w-full rounded-md border"
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** A single document card: live job state + the resolved terminal view. */
 function DocumentCard({
   doc,
@@ -293,6 +423,9 @@ function DocumentCard({
 }) {
   // Subscribe to this document's job. The hook's catch-up read guarantees a
   // terminal state is never missed even if the worker finished before mount.
+  // CRITICAL: this stays mounted regardless of collapse state, so a collapsed
+  // active row still receives live updates and its header StatusChip refreshes
+  // (collapsing hides only the detail body below, never the hook).
   const live = useJob(doc.jobId, workspaceId);
 
   // Live status wins once known; otherwise fall back to the server-loaded one.
@@ -304,6 +437,12 @@ function DocumentCard({
   const extracted =
     asExtractionResult(live?.result) ?? asExtractionResult(doc.extractedMetadata);
 
+  // Per-row collapse state, SEEDED from the SERVER status (deterministic, no
+  // hydration drift): an active job auto-expands; terminal/no-job rows start
+  // collapsed. After first paint the user's toggle wins — live transitions do
+  // NOT force re-expand/collapse. Not persisted (no localStorage — out of scope).
+  const [open, setOpen] = useState(() => shouldAutoExpand(doc.jobStatus));
+
   return (
     <Card>
       <CardHeader>
@@ -313,40 +452,60 @@ function DocumentCard({
               <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
               <span className="truncate">{doc.filename}</span>
             </CardTitle>
-            <CardDescription>{formatSize(doc.sizeBytes)}</CardDescription>
+            <CardDescription className="flex items-center gap-2">
+              <span>{formatSize(doc.sizeBytes)}</span>
+              <StatusChip status={status} />
+            </CardDescription>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1">
+            <DocumentPreviewDialog documentId={doc.id} filename={doc.filename} />
             <DeleteDocumentButton
               documentId={doc.id}
               clientId={clientId}
               filename={doc.filename}
               status={status}
             />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-expanded={open}
+              aria-label={open ? "Contraer detalle" : "Expandir detalle"}
+              onClick={() => setOpen((prev) => !prev)}
+            >
+              {open ? (
+                <CaretUpIcon className="text-muted-foreground" />
+              ) : (
+                <CaretDownIcon className="text-muted-foreground" />
+              )}
+            </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        {view === "progress" ? (
-          <JobProgress
-            progress={live?.progress ?? []}
-            status={status ?? "pending"}
-          />
-        ) : view === "failed" ? (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            <WarningCircleIcon
-              weight="fill"
-              className="mt-0.5 size-4 shrink-0"
+      {open ? (
+        <CardContent>
+          {view === "progress" ? (
+            <JobProgress
+              progress={live?.progress ?? []}
+              status={status ?? "pending"}
             />
-            <p>{errorMessageFor(live?.error ?? null)}</p>
-          </div>
-        ) : view === "extracted" && extracted ? (
-          <ExtractionView data={extracted} />
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Esperando la extracción…
-          </p>
-        )}
-      </CardContent>
+          ) : view === "failed" ? (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              <WarningCircleIcon
+                weight="fill"
+                className="mt-0.5 size-4 shrink-0"
+              />
+              <p>{errorMessageFor(live?.error ?? null)}</p>
+            </div>
+          ) : view === "extracted" && extracted ? (
+            <ExtractionView data={extracted} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Esperando la extracción…
+            </p>
+          )}
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
@@ -377,7 +536,7 @@ export function DocumentsTab({
     // Inline client-side validation mirrors the server's Zod rules so the user
     // gets immediate feedback (the server re-validates authoritatively).
     if (!(file instanceof File) || file.size === 0) {
-      setError("Elegí un archivo PDF.");
+      setError("Elige un archivo PDF.");
       return;
     }
     if (file.type !== "application/pdf") {
@@ -449,7 +608,7 @@ export function DocumentsTab({
             </EmptyMedia>
             <EmptyTitle>Todavía no hay documentos</EmptyTitle>
             <EmptyDescription>
-              Subí un PDF para extraer fechas, importes y partes implicadas
+              Sube un PDF para extraer fechas, importes y partes implicadas
               automáticamente.
             </EmptyDescription>
           </EmptyHeader>
