@@ -88,7 +88,9 @@ export default async function AiSettingsPage() {
       supportsStreaming: aiModelManifest.supportsStreaming,
     })
     .from(aiModelManifest)
-    .where(sql`${aiModelManifest.deprecatedAt} is null`);
+    .where(
+      sql`${aiModelManifest.deprecatedAt} is null and ${aiModelManifest.status} = 'active'`,
+    );
 
   // Month usage (UTC bucket — matches the ledger rollup index expression).
   const [usageRow] = await db
