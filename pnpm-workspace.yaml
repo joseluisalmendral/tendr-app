@@ -24,5 +24,6 @@ preferFrozenLockfile: true
 allowBuilds:
   esbuild: true
   msw: false
+  protobufjs: set this to true or false
   sharp: false
   unrs-resolver: false
