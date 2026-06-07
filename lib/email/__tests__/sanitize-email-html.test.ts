@@ -112,4 +112,35 @@ describe("sanitizeEmailHtml — preserves email-safe content", () => {
     expect(out).toContain("display:none");
     expect(out).toContain("Vista previa");
   });
+
+  it("strips protocol-relative URLs in img src and anchor href", () => {
+    const out = sanitizeEmailHtml(
+      '<a href="//evil.test/phish">x</a>' +
+        '<img src="//evil.test/pixel.gif" alt="p" />',
+    );
+    expect(out).not.toContain("//evil.test/phish");
+    expect(out).not.toContain("//evil.test/pixel.gif");
+  });
+
+  it("empties a <style> block carrying @import / url() / expression()", () => {
+    const out = sanitizeEmailHtml(
+      "<style>@import url('https://evil.test/x.css');" +
+        "body{background:url('https://evil.test/beacon.gif')}" +
+        "p{width:expression(alert(1))}</style><p>Hola</p>",
+    );
+    expect(out).not.toContain("@import");
+    expect(out).not.toContain("evil.test");
+    expect(out).not.toMatch(/expression\s*\(/);
+    expect(out).toContain("removed: unsafe css");
+    expect(out).toContain("Hola");
+  });
+
+  it("keeps a safe <style> block untouched", () => {
+    const out = sanitizeEmailHtml(
+      "<style>@media (prefers-color-scheme: dark){body{background:#1a1a1a}}</style>" +
+        "<p>Hola</p>",
+    );
+    expect(out).toContain("prefers-color-scheme: dark");
+    expect(out).not.toContain("removed: unsafe css");
+  });
 });
