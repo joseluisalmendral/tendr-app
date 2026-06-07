@@ -17,12 +17,16 @@ import { aiUsageLedger, workspaces } from "@/db/schema";
  * and the budget read are both workspace-scoped.
  *
  * Month bucketing (design §7 / R7): the predicate uses
- *   `created_at >= date_trunc('month', timezone('UTC', now()))`
- * to MATCH the ledger rollup index expression
- *   `date_trunc('month', created_at at time zone 'UTC')`
- * (db/schema/ai.ts). This is a deliberate divergence from the snippet's bare
- * `now()` so the predicate is index-usable AND the monthly reset is implicit
- * (no row deletion) and timezone-consistent. Last-month rows are excluded.
+ *   `created_at >= (date_trunc('month', now() at time zone 'UTC') at time zone 'UTC')`
+ * — the inner `at time zone 'UTC'` truncates the month in the UTC calendar and
+ * the outer one converts the result BACK to the timestamptz domain, so the
+ * comparison against `created_at` is immune to the session TimeZone. A bare
+ * `timezone('UTC', now())` RHS is `timestamp without time zone` and would be
+ * re-cast using the session TZ, silently shifting the bucket at month
+ * boundaries under any non-UTC session (pooler/role defaults). Matches the
+ * ledger rollup index expression `date_trunc('month', created_at at time zone
+ * 'UTC')` (db/schema/ai.ts). Monthly reset stays implicit (no row deletion);
+ * last-month rows are excluded.
  *
  * The `db` handle is injected (first param) so the module is import-testable
  * against the real local stack without a server-only coupling — same convention
@@ -95,7 +99,7 @@ export async function getBudgetStatus(
       and(
         eq(aiUsageLedger.workspaceId, workspaceId),
         // Match the ai_usage_ledger_workspace_month_idx expression exactly.
-        sql`${aiUsageLedger.createdAt} >= date_trunc('month', timezone('UTC', now()))`,
+        sql`${aiUsageLedger.createdAt} >= (date_trunc('month', now() at time zone 'UTC') at time zone 'UTC')`,
       ),
     );
 

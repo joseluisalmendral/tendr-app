@@ -142,6 +142,16 @@ describe("assertWithinBudget", () => {
     expect(status.warningThreshold).toBe(false);
   });
 
+  it("activates the warning flag at EXACTLY 80.0% of budget (>= boundary)", async () => {
+    await seedUsage(tenant.workspaceId, 8_000); // exactly 80%
+
+    const status = await assertWithinBudget(db, tenant.workspaceId);
+
+    expect(status.withinBudget).toBe(true);
+    expect(status.warningThreshold).toBe(true);
+    expect(status.percentUsed).toBeCloseTo(80, 5);
+  });
+
   it("passes at 99% of budget AND activates the 80% warning flag", async () => {
     await seedUsage(tenant.workspaceId, 9_900); // 99%
 

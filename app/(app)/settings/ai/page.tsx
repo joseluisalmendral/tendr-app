@@ -206,7 +206,7 @@ export default async function AiSettingsPage() {
           <div
             className="h-2 overflow-hidden rounded-full bg-muted"
             role="progressbar"
-            aria-valuenow={percentUsed}
+            aria-valuenow={Math.min(percentUsed, 100)}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-label="Porcentaje del budget mensual usado"
