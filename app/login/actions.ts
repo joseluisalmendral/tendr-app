@@ -13,6 +13,11 @@ import { createClient } from "@/lib/supabase/server";
 export type SendMagicLinkState =
   | { status: "idle" }
   | { status: "sent" }
+  // Emitted ONLY in the anonymous-promotion branch when Supabase has email
+  // confirmations DISABLED: updateUser applies the email in-place, no link is
+  // sent, and the session is already promoted. "sent" ("check your email")
+  // would be a lie here, so the page shows a distinct "session linked" copy.
+  | { status: "promoted" }
   | { status: "error"; message: string };
 
 const emailSchema = z.object({
@@ -71,7 +76,7 @@ export async function sendMagicLink(
 
   if (isAnonymous) {
     // Attach email to the current anonymous user → uid-preserving promotion.
-    const { error } = await supabase.auth.updateUser(
+    const { data, error } = await supabase.auth.updateUser(
       { email },
       { emailRedirectTo },
     );
@@ -83,6 +88,25 @@ export async function sendMagicLink(
       }
       return { status: "error", message: GENERIC_ERROR };
     }
+
+    // Auto-confirm detection. With Supabase "Confirm email" DISABLED, updateUser
+    // applies the email IMMEDIATELY: no link is sent, the returned user already
+    // has is_anonymous=false, and /auth/callback NEVER runs. The callback at
+    // app/auth/callback/route.ts is normally the SINGLE writer of the
+    // promote_user audit row (via log_promotion), so with confirmations off that
+    // row would never be written. This is the ONLY place it can be recorded in
+    // that mode, so we fire the audit RPC here, best-effort (same swallow-error
+    // semantics as the callback: the user is already promoted, a failed audit
+    // insert must not strand them).
+    //
+    // With confirmations ENABLED the returned user stays anonymous (the change
+    // is pending the email link), this branch is skipped, and the callback
+    // remains the sole writer — so there is no double-logging in either mode.
+    if (data?.user && data.user.is_anonymous === false) {
+      await supabase.rpc("log_promotion");
+      return { status: "promoted" };
+    }
+
     return { status: "sent" };
   }
 
