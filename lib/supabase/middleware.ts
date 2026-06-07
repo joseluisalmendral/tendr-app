@@ -14,12 +14,21 @@ export async function updateSession(
   // Route classification happens BEFORE creating the Supabase client. It only
   // reads the pathname and touches no cookies, so it is safe here.
   const isWebhook = pathname.startsWith("/api/webhooks");
+  // The Inngest endpoint is machine-to-machine: Inngest (dev server and Cloud)
+  // signs its own requests and serve() performs signature/dev-mode auth INSIDE
+  // the handler. No Supabase session cookie exists on these calls, so gating
+  // them with the API session check below would 401 register (GET/PUT) and
+  // event invocation (POST), making the async pipeline boundary unreachable in
+  // every environment. Treat it exactly like a webhook: skip all auth work.
+  const isInngest = pathname === "/api/inngest";
+  const isMachineToMachine = isWebhook || isInngest;
   const isApi = pathname.startsWith("/api/");
   const isPublic = PUBLIC_PATHS.has(pathname);
 
-  // Webhooks carry no cookies and must not run any auth work: skip the client
-  // entirely so we never touch session state for machine-to-machine calls.
-  if (isWebhook) {
+  // Machine-to-machine calls (webhooks, Inngest) carry no cookies and must not
+  // run any auth work: skip the client entirely so we never touch session
+  // state and never fail closed on a missing Supabase session.
+  if (isMachineToMachine) {
     return NextResponse.next({ request });
   }
 
