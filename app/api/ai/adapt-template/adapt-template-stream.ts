@@ -12,7 +12,10 @@ import {
   templateAdaptations,
   templates,
 } from "@/db/schema";
-import { assertWithinBudget, isBudgetExceededError } from "@/lib/ai/cost-budget";
+import {
+  assertWithinBudget,
+  isBudgetExceededError,
+} from "@/lib/ai/cost-budget";
 import {
   computeCostMicrocents,
   microcentsToCents,
@@ -77,7 +80,10 @@ export const adaptTemplateInputSchema = z.object({
   extraInstructions: z
     .string()
     .trim()
-    .max(EXTRA_INSTRUCTIONS_MAX, "Las instrucciones extra son demasiado largas.")
+    .max(
+      EXTRA_INSTRUCTIONS_MAX,
+      "Las instrucciones extra son demasiado largas.",
+    )
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
 });
@@ -104,7 +110,15 @@ export interface AdaptTemplateDeps {
 
 export type AdaptTemplateStreamResult =
   | { ok: true; stream: StreamTextResult<ToolSet, never> }
-  | { ok: false; errorCode: AiErrorCode | "validation_error" | "not_found" | "budget_exceeded"; error: string };
+  | {
+      ok: false;
+      errorCode:
+        | AiErrorCode
+        | "validation_error"
+        | "not_found"
+        | "budget_exceeded";
+      error: string;
+    };
 
 const SYSTEM_PROMPT =
   "Adapta la plantilla para el cliente indicado. Mantén el formato markdown, " +
@@ -234,7 +248,9 @@ export async function adaptTemplateStreamWith(
 
   const userPrompt =
     `Cliente: ${client.name}\n` +
-    (client.notes ? `Resumen de notas del cliente: ${client.notes}\n\n` : "\n") +
+    (client.notes
+      ? `Resumen de notas del cliente: ${client.notes}\n\n`
+      : "\n") +
     casesBlock +
     (extraInstructions
       ? `Instrucciones adicionales del usuario: ${extraInstructions}\n\n`
@@ -261,66 +277,72 @@ export async function adaptTemplateStreamWith(
       const inputTokens = u?.inputTokens ?? 0;
       const outputTokens = u?.outputTokens ?? 0;
 
-      const cost = await deps.getManifestCost(
-        deps.db,
-        model.provider,
-        model.modelId,
-      );
-      // F7c: bill in USD micro-cents with NO per-call ceil (Langfuse parity).
-      // Dual-write the legacy cost_cents (nearest cent) during the transition.
-      const costMicrocents = computeCostMicrocents(
-        inputTokens,
-        outputTokens,
-        cost?.costPer1kInput ?? 0,
-        cost?.costPer1kOutput ?? 0,
-      );
-      const costCents = microcentsToCents(costMicrocents);
+      // Side-effects (ledger + adaptation persist) are wrapped so a DB failure
+      // can NEVER skip generation.end()/flush() and leave a dangling Langfuse
+      // span. The trace close runs in `finally`.
+      try {
+        const cost = await deps.getManifestCost(
+          deps.db,
+          model.provider,
+          model.modelId,
+        );
+        // F7c: bill in USD micro-cents with NO per-call ceil (Langfuse parity).
+        // Dual-write the legacy cost_cents (nearest cent) during the transition.
+        const costMicrocents = computeCostMicrocents(
+          inputTokens,
+          outputTokens,
+          cost?.costPer1kInput ?? 0,
+          cost?.costPer1kOutput ?? 0,
+        );
+        const costCents = microcentsToCents(costMicrocents);
 
-      // Ledger insert only when we have REAL usage (a cancelled stream with no
-      // usable token counts must not write a phantom row).
-      if (inputTokens > 0 || outputTokens > 0) {
-        await deps.db.insert(aiUsageLedger).values({
-          workspaceId,
-          feature: FEATURE,
-          provider: model.provider,
-          modelId: model.modelId,
-          tokensIn: inputTokens,
-          tokensOut: outputTokens,
-          costCents,
-          costMicrocents,
+        // Ledger insert only when we have REAL usage (a cancelled stream with no
+        // usable token counts must not write a phantom row).
+        if (inputTokens > 0 || outputTokens > 0) {
+          await deps.db.insert(aiUsageLedger).values({
+            workspaceId,
+            feature: FEATURE,
+            provider: model.provider,
+            modelId: model.modelId,
+            tokensIn: inputTokens,
+            tokensOut: outputTokens,
+            costCents,
+            costMicrocents,
+          });
+        }
+
+        // AUTOMATIC PERSIST (F7c finding 3): once the adaptation completes, store
+        // the full streamed result linked to (workspace, template, client) so the
+        // dialog history + copy button can read it (PR-F7C-3b). Only persist a
+        // non-empty result. The user-session db is RLS-bound; the explicit
+        // workspaceId is the same gate used for the lookups above. The result
+        // text is client PII living under the workspace's own RLS — acceptable,
+        // and NEVER traced.
+        if (text.length > 0) {
+          await deps.db.insert(templateAdaptations).values({
+            workspaceId,
+            templateId,
+            clientId,
+            resultText: text,
+            extraInstructions: extraInstructions ?? null,
+            provider: model.provider,
+            modelId: model.modelId,
+          });
+        }
+
+        // Trace output carries ONLY a length + usage — never the generated text.
+        generation.update({
+          output: { length: text.length },
+          usageDetails: {
+            input: inputTokens,
+            output: outputTokens,
+            total: u?.totalTokens ?? inputTokens + outputTokens,
+          },
         });
+      } finally {
+        generation.end();
+        await deps.trace.flush();
       }
-
-      // AUTOMATIC PERSIST (F7c finding 3): once the adaptation completes, store
-      // the full streamed result linked to (workspace, template, client) so the
-      // dialog history + copy button can read it (PR-F7C-3b). Only persist a
-      // non-empty result. The user-session db is RLS-bound; the explicit
-      // workspaceId is the same gate used for the lookups above. The result
-      // text is client PII living under the workspace's own RLS — acceptable,
-      // and NEVER traced.
-      if (text.length > 0) {
-        await deps.db.insert(templateAdaptations).values({
-          workspaceId,
-          templateId,
-          clientId,
-          resultText: text,
-          extraInstructions: extraInstructions ?? null,
-          provider: model.provider,
-          modelId: model.modelId,
-        });
-      }
-
-      // Trace output carries ONLY a length + usage — never the generated text.
-      generation.update({
-        output: { length: text.length },
-        usageDetails: {
-          input: inputTokens,
-          output: outputTokens,
-          total: u?.totalTokens ?? inputTokens + outputTokens,
-        },
-      });
-      generation.end();
-      await deps.trace.flush();
     },
     onError: async () => {
       // The stream errored mid-flight: close the trace without a phantom ledger
