@@ -310,18 +310,21 @@ function ExportActions({ html, subject }: { html: string; subject: string }) {
   }
 
   function handleDownload() {
+    let url: string | null = null;
     try {
       const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
+      url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = buildDownloadFilename(subject);
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
     } catch {
       toast.error("No se pudo descargar el archivo.");
+    } finally {
+      // Always release the object URL, even if the click/anchor path threw.
+      if (url) URL.revokeObjectURL(url);
     }
   }
 
