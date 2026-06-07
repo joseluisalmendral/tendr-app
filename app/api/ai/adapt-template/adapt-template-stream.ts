@@ -1,12 +1,21 @@
 import type { LanguageModel, StreamTextResult, ToolSet } from "ai";
 import { streamText } from "ai";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import type * as schema from "@/db/schema";
-import { aiUsageLedger, clients, templates } from "@/db/schema";
-import { assertWithinBudget, isBudgetExceededError } from "@/lib/ai/cost-budget";
+import {
+  aiUsageLedger,
+  cases,
+  clients,
+  templateAdaptations,
+  templates,
+} from "@/db/schema";
+import {
+  assertWithinBudget,
+  isBudgetExceededError,
+} from "@/lib/ai/cost-budget";
 import {
   computeCostMicrocents,
   microcentsToCents,
@@ -55,9 +64,28 @@ import type { TracePort } from "@/lib/ai/trace";
 
 const FEATURE = "adapt_template" as const;
 
+/** Max free-text steering the user may add. Bounded so it cannot blow up the
+ *  prompt (or the persisted row). 2000 chars is generous for a few sentences. */
+export const EXTRA_INSTRUCTIONS_MAX = 2000;
+
+/** Cases considered "active" for personalization context — the open pipeline
+ *  stages, NOT closed_won / closed_lost. */
+const ACTIVE_CASE_STATUSES = ["prospect", "proposal", "active"] as const;
+
 export const adaptTemplateInputSchema = z.object({
   templateId: z.string().uuid(),
   clientId: z.string().uuid(),
+  // Optional free-text the user typed in the adapt dialog. Trimmed + bounded;
+  // empty/whitespace normalizes to undefined so it never adds a blank section.
+  extraInstructions: z
+    .string()
+    .trim()
+    .max(
+      EXTRA_INSTRUCTIONS_MAX,
+      "Las instrucciones extra son demasiado largas.",
+    )
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
 });
 
 export type AdaptTemplateInput = z.input<typeof adaptTemplateInputSchema>;
@@ -82,12 +110,24 @@ export interface AdaptTemplateDeps {
 
 export type AdaptTemplateStreamResult =
   | { ok: true; stream: StreamTextResult<ToolSet, never> }
-  | { ok: false; errorCode: AiErrorCode | "validation_error" | "not_found" | "budget_exceeded"; error: string };
+  | {
+      ok: false;
+      errorCode:
+        | AiErrorCode
+        | "validation_error"
+        | "not_found"
+        | "budget_exceeded";
+      error: string;
+    };
 
 const SYSTEM_PROMPT =
   "Adapta la plantilla para el cliente indicado. Mantén el formato markdown, " +
   "personaliza el tono y las referencias al cliente, y conserva las variables " +
-  "que no apliquen. Devuelve solo el markdown adaptado, sin explicaciones.";
+  "que no apliquen. Usa el resumen de notas y los casos activos del cliente " +
+  "para personalizar el contenido de forma relevante y profesional. Mantén un " +
+  "tono cercano pero profesional, adecuado a una relación comercial B2B. Si el " +
+  "usuario incluye instrucciones adicionales, respétalas con prioridad. " +
+  "Devuelve solo el markdown adaptado, sin explicaciones.";
 
 /**
  * Runs the adaptTemplate streaming feature. Returns the StreamTextResult on
@@ -106,7 +146,7 @@ export async function adaptTemplateStreamWith(
       error: "Datos inválidos.",
     };
   }
-  const { templateId, clientId } = parsed.data;
+  const { templateId, clientId, extraInstructions } = parsed.data;
 
   // 1. Template + client lookup — explicit workspaceId tenancy gate on BOTH.
   const [template] = await deps.db
@@ -130,6 +170,19 @@ export async function adaptTemplateStreamWith(
       error: "No se encontró la plantilla o el cliente.",
     };
   }
+
+  // 1b. Active cases for this client (workspace-scoped) — title + status feed
+  //     the personalized prompt. Closed cases are excluded as not "active".
+  const activeCases = await deps.db
+    .select({ title: cases.title, status: cases.status })
+    .from(cases)
+    .where(
+      and(
+        eq(cases.clientId, clientId),
+        eq(cases.workspaceId, workspaceId),
+        inArray(cases.status, ACTIVE_CASE_STATUSES),
+      ),
+    );
 
   // 2. Resolve the model for the feature.
   let model: ModelForFeature;
@@ -166,7 +219,8 @@ export async function adaptTemplateStreamWith(
     return { ok: false, errorCode: mapped.code, error: mapped.message };
   }
 
-  // 5. Metadata-only trace. NEVER the body or notes — only lengths + ids.
+  // 5. Metadata-only trace. NEVER the body, notes, cases text, or extra
+  //    instructions — only LENGTHS + COUNTS + ids (PII HARD-STOP, #748).
   const generation = deps.trace.startGeneration(FEATURE, model.modelId, {
     workspaceId,
     templateId,
@@ -176,12 +230,31 @@ export async function adaptTemplateStreamWith(
     model: model.modelId,
     templateLength: template.bodyMarkdown.length,
     clientName: client.name,
+    notesSummaryLength: client.notes?.length ?? 0,
+    activeCasesCount: activeCases.length,
+    extraInstructionsLength: extraInstructions?.length ?? 0,
   });
 
-  // The body + notes go to the MODEL (prompt), not the trace.
+  // The body + notes + active cases + extra instructions go to the MODEL
+  // (prompt), NEVER to the trace.
+  const casesBlock =
+    activeCases.length > 0
+      ? "Casos activos del cliente:\n" +
+        activeCases
+          .map((c) => `- ${c.title} (estado: ${c.status ?? "sin estado"})`)
+          .join("\n") +
+        "\n\n"
+      : "";
+
   const userPrompt =
     `Cliente: ${client.name}\n` +
-    (client.notes ? `Notas del cliente: ${client.notes}\n\n` : "\n") +
+    (client.notes
+      ? `Resumen de notas del cliente: ${client.notes}\n\n`
+      : "\n") +
+    casesBlock +
+    (extraInstructions
+      ? `Instrucciones adicionales del usuario: ${extraInstructions}\n\n`
+      : "") +
     `Plantilla (markdown):\n${template.bodyMarkdown}`;
 
   let languageModel: LanguageModel;
@@ -204,47 +277,72 @@ export async function adaptTemplateStreamWith(
       const inputTokens = u?.inputTokens ?? 0;
       const outputTokens = u?.outputTokens ?? 0;
 
-      const cost = await deps.getManifestCost(
-        deps.db,
-        model.provider,
-        model.modelId,
-      );
-      // F7c: bill in USD micro-cents with NO per-call ceil (Langfuse parity).
-      // Dual-write the legacy cost_cents (nearest cent) during the transition.
-      const costMicrocents = computeCostMicrocents(
-        inputTokens,
-        outputTokens,
-        cost?.costPer1kInput ?? 0,
-        cost?.costPer1kOutput ?? 0,
-      );
-      const costCents = microcentsToCents(costMicrocents);
+      // Side-effects (ledger + adaptation persist) are wrapped so a DB failure
+      // can NEVER skip generation.end()/flush() and leave a dangling Langfuse
+      // span. The trace close runs in `finally`.
+      try {
+        const cost = await deps.getManifestCost(
+          deps.db,
+          model.provider,
+          model.modelId,
+        );
+        // F7c: bill in USD micro-cents with NO per-call ceil (Langfuse parity).
+        // Dual-write the legacy cost_cents (nearest cent) during the transition.
+        const costMicrocents = computeCostMicrocents(
+          inputTokens,
+          outputTokens,
+          cost?.costPer1kInput ?? 0,
+          cost?.costPer1kOutput ?? 0,
+        );
+        const costCents = microcentsToCents(costMicrocents);
 
-      // Ledger insert only when we have REAL usage (a cancelled stream with no
-      // usable token counts must not write a phantom row).
-      if (inputTokens > 0 || outputTokens > 0) {
-        await deps.db.insert(aiUsageLedger).values({
-          workspaceId,
-          feature: FEATURE,
-          provider: model.provider,
-          modelId: model.modelId,
-          tokensIn: inputTokens,
-          tokensOut: outputTokens,
-          costCents,
-          costMicrocents,
+        // Ledger insert only when we have REAL usage (a cancelled stream with no
+        // usable token counts must not write a phantom row).
+        if (inputTokens > 0 || outputTokens > 0) {
+          await deps.db.insert(aiUsageLedger).values({
+            workspaceId,
+            feature: FEATURE,
+            provider: model.provider,
+            modelId: model.modelId,
+            tokensIn: inputTokens,
+            tokensOut: outputTokens,
+            costCents,
+            costMicrocents,
+          });
+        }
+
+        // AUTOMATIC PERSIST (F7c finding 3): once the adaptation completes, store
+        // the full streamed result linked to (workspace, template, client) so the
+        // dialog history + copy button can read it (PR-F7C-3b). Only persist a
+        // non-empty result. The user-session db is RLS-bound; the explicit
+        // workspaceId is the same gate used for the lookups above. The result
+        // text is client PII living under the workspace's own RLS — acceptable,
+        // and NEVER traced.
+        if (text.length > 0) {
+          await deps.db.insert(templateAdaptations).values({
+            workspaceId,
+            templateId,
+            clientId,
+            resultText: text,
+            extraInstructions: extraInstructions ?? null,
+            provider: model.provider,
+            modelId: model.modelId,
+          });
+        }
+
+        // Trace output carries ONLY a length + usage — never the generated text.
+        generation.update({
+          output: { length: text.length },
+          usageDetails: {
+            input: inputTokens,
+            output: outputTokens,
+            total: u?.totalTokens ?? inputTokens + outputTokens,
+          },
         });
+      } finally {
+        generation.end();
+        await deps.trace.flush();
       }
-
-      // Trace output carries ONLY a length + usage — never the generated text.
-      generation.update({
-        output: { length: text.length },
-        usageDetails: {
-          input: inputTokens,
-          output: outputTokens,
-          total: u?.totalTokens ?? inputTokens + outputTokens,
-        },
-      });
-      generation.end();
-      await deps.trace.flush();
     },
     onError: async () => {
       // The stream errored mid-flight: close the trace without a phantom ledger
