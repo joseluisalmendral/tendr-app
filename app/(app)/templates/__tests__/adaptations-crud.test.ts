@@ -110,6 +110,51 @@ describe("adaptations CRUD seam", () => {
     expect(rows[1].resultText).toBe("older");
   });
 
+  it("list surfaces the beautified_* fields when an email was generated", async () => {
+    await serviceDb.insert(s.templateAdaptations).values({
+      workspaceId: tenantA.workspaceId,
+      templateId: aTemplateId,
+      clientId: aClientId,
+      resultText: "adapted body",
+      beautifiedHtml: "<html><body><p>Hola</p></body></html>",
+      emailSubject: "Asunto generado",
+      emailPreheader: "Preview corto",
+      beautifiedPalette: "oceano",
+      beautifiedAt: new Date("2026-03-01T00:00:00Z"),
+    });
+
+    const [row] = await crud.listAdaptations(
+      { db: serviceDb },
+      tenantA.workspaceId,
+      { templateId: aTemplateId, clientId: aClientId },
+    );
+
+    expect(row.beautifiedHtml).toContain("<p>Hola</p>");
+    expect(row.emailSubject).toBe("Asunto generado");
+    expect(row.emailPreheader).toBe("Preview corto");
+    expect(row.beautifiedPalette).toBe("oceano");
+  });
+
+  it("list returns null beautified_* fields for a not-yet-beautified row", async () => {
+    await serviceDb.insert(s.templateAdaptations).values({
+      workspaceId: tenantA.workspaceId,
+      templateId: aTemplateId,
+      clientId: aClientId,
+      resultText: "plain adaptation",
+    });
+
+    const [row] = await crud.listAdaptations(
+      { db: serviceDb },
+      tenantA.workspaceId,
+      { templateId: aTemplateId, clientId: aClientId },
+    );
+
+    expect(row.beautifiedHtml).toBeNull();
+    expect(row.emailSubject).toBeNull();
+    expect(row.emailPreheader).toBeNull();
+    expect(row.beautifiedPalette).toBeNull();
+  });
+
   it("list does not return another (template, client) pair's rows", async () => {
     await serviceDb.insert(s.templateAdaptations).values({
       workspaceId: tenantA.workspaceId,
