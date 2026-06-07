@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 import type {
   RealtimePostgresChangesPayload,
@@ -13,9 +13,21 @@ import { createClient } from "@/lib/supabase/client";
  * Reusable workspace-scoped Realtime subscription hook (design §6).
  *
  * Subscribes the browser Supabase client (which carries the user session
- * cookie via @supabase/ssr, so postgres_changes are RLS-authorized) to a single
- * channel `workspace:${workspaceId}` and forwards `postgres_changes` events on
- * one table to `onChange`.
+ * cookie via @supabase/ssr, so postgres_changes are RLS-authorized) to a
+ * channel unique to THIS hook instance and forwards `postgres_changes` events
+ * on one table to `onChange`.
+ *
+ * INSTANCE-UNIQUE CHANNEL NAME: supabase-js caches one `RealtimeChannel` object
+ * per topic string, returning the SAME object for the same name. If two hook
+ * instances mounted concurrently shared a name (e.g. a fixed
+ * `workspace:${workspaceId}`), the second instance would call `.on()` on the
+ * channel the first already `subscribe()`d, which throws "cannot add
+ * postgres_changes callbacks ... after subscribe()". F6's DocumentsTab mounts N
+ * `useJob` instances at once (one per document card), so the name MUST be unique
+ * per instance. We append a stable `useId()` value (see
+ * `workspaceRealtimeChannelName`). Channel names are purely client-side
+ * identifiers — N channels for the same workspace is fine; each still carries
+ * the MANDATORY `workspace_id` filter and RLS authorization.
  *
  * MANDATORY tenant filter: the binding ALWAYS sets
  * `filter: workspace_id=eq.${workspaceId}`. Omitting it would deliver other
@@ -55,6 +67,23 @@ export function workspaceRealtimeFilter(workspaceId: string): string {
   return `workspace_id=eq.${workspaceId}`;
 }
 
+/**
+ * Builds the per-hook-instance channel name. Pure so tests can assert that two
+ * concurrent instances NEVER collide on the same name (which would make the
+ * second instance call `.on()` on an already-subscribed channel and crash).
+ *
+ * `instanceId` is the caller's `useId()` value: stable across that instance's
+ * renders, unique across instances. We still scope the name by workspace and
+ * table so it reads meaningfully in logs / the Realtime inspector.
+ */
+export function workspaceRealtimeChannelName(
+  workspaceId: string,
+  table: string,
+  instanceId: string,
+): string {
+  return `workspace:${workspaceId}:${table}:${instanceId}`;
+}
+
 export function useWorkspaceRealtime<Row extends Record<string, unknown>>({
   workspaceId,
   table,
@@ -73,6 +102,11 @@ export function useWorkspaceRealtime<Row extends Record<string, unknown>>({
     onSubscribedRef.current = onSubscribed;
   });
 
+  // Stable per-instance id → unique channel name (see
+  // `workspaceRealtimeChannelName`). Prevents the supabase-js shared-channel
+  // crash when multiple instances mount for the same workspace/table.
+  const instanceId = useId();
+
   // Serialize events so the effect dep is a primitive (stable across renders).
   const eventsKey = events ? [...events].sort().join(",") : "*";
 
@@ -81,7 +115,7 @@ export function useWorkspaceRealtime<Row extends Record<string, unknown>>({
 
     const supabase = createClient();
     const channel: RealtimeChannel = supabase.channel(
-      `workspace:${workspaceId}`,
+      workspaceRealtimeChannelName(workspaceId, table, instanceId),
     );
 
     const filter = workspaceRealtimeFilter(workspaceId);
@@ -125,5 +159,7 @@ export function useWorkspaceRealtime<Row extends Record<string, unknown>>({
       cancelled = true;
       void supabase.removeChannel(channel);
     };
-  }, [workspaceId, table, eventsKey]);
+    // instanceId is stable for the component's lifetime; listed for exhaustive
+    // deps correctness — it never actually changes between renders.
+  }, [workspaceId, table, eventsKey, instanceId]);
 }
