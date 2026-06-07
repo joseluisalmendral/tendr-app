@@ -28,11 +28,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 import { createTemplate, updateTemplate } from "./actions";
+import type { TemplateRow } from "./template-crud";
 import {
   TEMPLATE_BODY_MAX_LENGTH,
   TEMPLATE_NAME_MAX_LENGTH,
-  type TemplateRow,
-} from "./template-crud";
+} from "./template-limits";
 
 /**
  * Create/Edit template dialog with a markdown body editor, a comma-separated

@@ -23,11 +23,23 @@ import { templates } from "@/db/schema";
  * provider-key / feature-model actions only).
  */
 
-/** Bounds keep a template body reasonable and bound the AI prompt size. */
-export const TEMPLATE_NAME_MAX_LENGTH = 120;
-export const TEMPLATE_BODY_MAX_LENGTH = 20_000;
-export const TEMPLATE_VARIABLE_MAX_LENGTH = 60;
-export const TEMPLATE_MAX_VARIABLES = 50;
+/**
+ * Bounds live in template-limits.ts (client-safe, dependency-free) so the
+ * form dialog can import them without bundling this server seam. Re-exported
+ * here for server-side consumers and existing imports.
+ */
+export {
+  TEMPLATE_NAME_MAX_LENGTH,
+  TEMPLATE_BODY_MAX_LENGTH,
+  TEMPLATE_VARIABLE_MAX_LENGTH,
+  TEMPLATE_MAX_VARIABLES,
+} from "./template-limits";
+import {
+  TEMPLATE_NAME_MAX_LENGTH,
+  TEMPLATE_BODY_MAX_LENGTH,
+  TEMPLATE_VARIABLE_MAX_LENGTH,
+  TEMPLATE_MAX_VARIABLES,
+} from "./template-limits";
 
 const variableSchema = z
   .string()
