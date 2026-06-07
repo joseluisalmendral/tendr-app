@@ -245,6 +245,13 @@ export async function adaptTemplateStreamWith(
       generation.end();
       await deps.trace.flush();
     },
+    onAbort: async () => {
+      // Client aborted mid-stream: AI SDK v6 fires onAbort INSTEAD of
+      // onFinish/onError, so close the trace here too or the generation
+      // observation dangles in Langfuse. No ledger row (no real usage).
+      generation.end();
+      await deps.trace.flush();
+    },
   });
 
   return { ok: true, stream };
