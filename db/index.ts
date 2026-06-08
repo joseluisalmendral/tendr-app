@@ -7,11 +7,16 @@ import * as schema from "./schema";
  * User-session Drizzle client.
  *
  * Connects over the Postgres session port (5432, NOT the transaction pooler)
- * via DATABASE_URL. This client carries the user/anon role and is therefore
- * SUBJECT TO RLS — it is the path whose tenant isolation the F3 test suite
- * exercises. Privileged write paths (Inngest, Stripe webhooks, the F6
- * extractor, manifest curation) use a separate service_role connection that
- * bypasses RLS and is introduced in their owning phases.
+ * via DATABASE_URL. IMPORTANT: the connection role is whatever DATABASE_URL
+ * authenticates as (today the `postgres` owner/superuser), and this client does
+ * NOT inject a per-request JWT or `SET ROLE`. An owner/superuser BYPASSES RLS
+ * unless the table uses FORCE ROW LEVEL SECURITY (ours do not) — so this path
+ * does NOT enforce RLS at the SQL layer. Tenant isolation on THIS path is
+ * carried by explicit `eq(workspace_id)` filters + a server-resolved
+ * workspaceId in every query, NOT by RLS. RLS policies (and the F3 isolation
+ * suite) guard only the supabase-js / PostgREST path (JWT -> authenticated
+ * role). Privileged write paths (Inngest, Stripe webhooks, the F6 extractor,
+ * manifest curation) use the separate service_role connection in db/service.ts.
  */
 const connectionString = process.env.DATABASE_URL;
 

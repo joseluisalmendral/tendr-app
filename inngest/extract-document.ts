@@ -31,6 +31,7 @@ import {
 } from "@/lib/ai/get-provider-client";
 import { AiProviderError } from "@/lib/ai/provider-errors";
 import { extractTextFromPdf } from "@/lib/ai/pdf-parse";
+import { PlanGateError, requirePlanWith } from "@/lib/auth/require-plan";
 import {
   resolveExtractionModel,
   type ExtractionModelRoute,
@@ -165,7 +166,8 @@ async function markJobFailed(
     | "invalid_api_key"
     | "document_error"
     | "budget_exceeded"
-    | "no_key_configured",
+    | "no_key_configured"
+    | "plan_required",
   message: string,
 ): Promise<void> {
   await serviceDb
@@ -199,6 +201,38 @@ export async function assertExtractBudget(
     if (isBudgetExceededError(e)) {
       await markJobFailed(jobId, "budget_exceeded", e.message);
       throw new NonRetriableError(e.message);
+    }
+    throw e;
+  }
+}
+
+/**
+ * F8 plan gate for the extract step (PAID feature). Runs BEFORE any expensive
+ * work as the in-job BACKSTOP: the enqueue-time gate (the Server Actions) already
+ * redirects a Free user before the job is sent, so this catches the case where a
+ * workspace DOWNGRADES after enqueue. There is NO session here, so it reads with
+ * the service-role `serviceDb` (RLS-bypass) — the fail-closed `requirePlanWith`
+ * logic itself decides entitlement, not RLS visibility.
+ *
+ * A genuine entitlement denial (`PlanGateError`) is TERMINAL: a retry this state
+ * cannot succeed, so it marks the job `failed` with the curated `plan_required`
+ * code and throws `NonRetriableError` (no retry burn). Any OTHER error (a DB/infra
+ * failure from the read) is rethrown UNCHANGED so Inngest's `retries` apply — it
+ * is NEVER recorded as `plan_required`.
+ *
+ * Exported so a test can drive it against a real local-stack job row + seeded
+ * subscription without the Inngest engine (mirrors `assertExtractBudget`).
+ */
+export async function assertExtractPlan(
+  jobId: string,
+  workspaceId: string,
+): Promise<void> {
+  try {
+    await requirePlanWith(serviceDb, workspaceId, "pro");
+  } catch (e) {
+    if (e instanceof PlanGateError) {
+      await markJobFailed(jobId, "plan_required", "upgrade required");
+      throw new NonRetriableError("plan_required");
     }
     throw e;
   }
@@ -430,6 +464,13 @@ export const extractDocument = inngest.createFunction(
   async ({ event, step }) => {
     const { jobId, documentId, workspaceId } =
       event.data as DocumentsExtractEventData;
+
+    // 0. plan-gate: F8 PAID-feature backstop. Runs BEFORE any expensive work
+    //    (and before mark-running) so a downgraded workspace fails cleanly with
+    //    a terminal `plan_required` instead of burning retries on extraction.
+    await step.run("plan-gate", async () => {
+      await assertExtractPlan(jobId, workspaceId);
+    });
 
     // 1. mark-running
     await step.run("mark-running", async () => {

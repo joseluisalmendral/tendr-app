@@ -1,11 +1,14 @@
 "use server";
 
+import { redirect } from "next/navigation";
+
 import { ensureAnonymousWorkspace } from "@/app/(auth)/actions";
 import { db } from "@/db";
 import { getProviderClient } from "@/lib/ai/get-provider-client";
 import { manifestCostFor } from "@/lib/ai/manifest-cost";
 import { createLangfuseTracePort } from "@/lib/ai/trace";
 import { getCurrentWorkspace } from "@/lib/auth/get-current-workspace";
+import { PlanGateError, requirePlan } from "@/lib/auth/require-plan";
 
 import {
   summarizeWith,
@@ -61,6 +64,17 @@ export async function summarize(
     };
   }
 
+  // F8 plan gate (PAID feature). Runs before any expensive work. A genuine
+  // entitlement denial redirects to /upgrade; `redirect()` throws a NEXT_REDIRECT
+  // control-flow signal that MUST propagate, so the gate sits OUTSIDE the seam's
+  // own try/catch. Any non-PlanGateError (a DB/infra failure) rethrows unchanged.
+  try {
+    await requirePlan(workspaceId, "pro");
+  } catch (e) {
+    if (e instanceof PlanGateError) redirect("/upgrade");
+    throw e;
+  }
+
   const trace = await createLangfuseTracePort();
   return summarizeWith(
     { db, getProviderClient, getManifestCost: manifestCostFor, trace },
@@ -77,6 +91,14 @@ export async function suggest(input: SuggestInput): Promise<SuggestResult> {
       errorCode: "validation_error",
       error: "Tu sesión expiró. Vuelve a iniciar sesión.",
     };
+  }
+
+  // F8 plan gate (PAID feature). See `summarize` for the NEXT_REDIRECT rationale.
+  try {
+    await requirePlan(workspaceId, "pro");
+  } catch (e) {
+    if (e instanceof PlanGateError) redirect("/upgrade");
+    throw e;
   }
 
   const trace = await createLangfuseTracePort();
@@ -97,6 +119,14 @@ export async function beautifyEmail(
       errorCode: "validation_error",
       error: "Tu sesión expiró. Vuelve a iniciar sesión.",
     };
+  }
+
+  // F8 plan gate (PAID feature). See `summarize` for the NEXT_REDIRECT rationale.
+  try {
+    await requirePlan(workspaceId, "pro");
+  } catch (e) {
+    if (e instanceof PlanGateError) redirect("/upgrade");
+    throw e;
   }
 
   const trace = await createLangfuseTracePort();

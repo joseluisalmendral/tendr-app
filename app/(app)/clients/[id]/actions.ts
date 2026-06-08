@@ -2,6 +2,7 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { ensureAnonymousWorkspace } from "@/app/(auth)/actions";
 import { db } from "@/db";
@@ -9,6 +10,7 @@ import { jobs } from "@/db/schema";
 import { serviceDb } from "@/db/service";
 import { inngest } from "@/inngest/client";
 import { getCurrentWorkspace } from "@/lib/auth/get-current-workspace";
+import { PlanGateError, requirePlan } from "@/lib/auth/require-plan";
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { createCaseInWorkspace, type CreateCaseState } from "./create-case";
@@ -132,6 +134,18 @@ export async function uploadDocument(
     };
   }
 
+  // F8 plan gate (PAID feature) — enqueue-time, defense-in-depth: a Free user is
+  // redirected to /upgrade BEFORE the document is uploaded or the job enqueued.
+  // The in-job gate (extract-document `plan-gate` step) is the backstop for a
+  // post-enqueue downgrade. `redirect()` throws NEXT_REDIRECT, which propagates
+  // out of the action; any non-PlanGateError (DB/infra) rethrows unchanged.
+  try {
+    await requirePlan(workspaceId, "pro");
+  } catch (e) {
+    if (e instanceof PlanGateError) redirect("/upgrade");
+    throw e;
+  }
+
   const file = formData.get("file");
   const clientId = formData.get("clientId");
 
@@ -223,6 +237,16 @@ export async function retryExtraction(input: {
   const workspaceId = await resolveWorkspaceId();
   if (!workspaceId) {
     return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  }
+
+  // F8 plan gate (PAID feature) — enqueue-time, defense-in-depth. A Free user is
+  // redirected to /upgrade before the extraction is re-enqueued. See
+  // `uploadDocument` for the NEXT_REDIRECT / infra-error rationale.
+  try {
+    await requirePlan(workspaceId, "pro");
+  } catch (e) {
+    if (e instanceof PlanGateError) redirect("/upgrade");
+    throw e;
   }
 
   const result = await retryExtractionWith(

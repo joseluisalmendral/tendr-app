@@ -6,6 +6,7 @@ import { manifestCostFor } from "@/lib/ai/manifest-cost";
 import { statusForCode, type AiErrorCode } from "@/lib/ai/provider-errors";
 import { createLangfuseTracePort } from "@/lib/ai/trace";
 import { getCurrentWorkspace } from "@/lib/auth/get-current-workspace";
+import { PlanGateError, requirePlanWith } from "@/lib/auth/require-plan";
 
 import {
   adaptTemplateStreamWith,
@@ -58,6 +59,23 @@ export async function POST(request: Request): Promise<Response> {
       { error: "Tu sesión expiró. Vuelve a iniciar sesión.", code: "unauthorized" },
       { status: 401 },
     );
+  }
+
+  // F8 plan gate (PAID feature). Uses the same RLS `db` the seam is injected
+  // with (the authenticated user can SELECT only their own subscription row).
+  // A genuine entitlement denial returns 403 with a redirect hint; ANY other
+  // error (a DB/infra failure) rethrows and falls through to the route's
+  // generic error handling (a 500), never a 403.
+  try {
+    await requirePlanWith(db, ws.workspaceId, "pro");
+  } catch (e) {
+    if (e instanceof PlanGateError) {
+      return NextResponse.json(
+        { error: "upgrade required", code: "plan_required", redirectTo: "/upgrade" },
+        { status: 403 },
+      );
+    }
+    throw e;
   }
 
   let body: AdaptTemplateInput;
