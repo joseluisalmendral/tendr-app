@@ -85,3 +85,52 @@ RLS isolation, Zod contracts, RPC grants and atomicity, action return
 shapes. The browser pass does not replace them — it covers the seams they
 cannot reach: hydration, focus, sensors, websockets, optimistic timing,
 loading states, viewport behavior.
+
+## F8 close — Stripe payments + plan gate (browser walk)
+
+End-to-end walk for the payments phase. Run it on your machine with the
+full-local dev mode above, plus a Stripe test-mode account and the CLI
+listener in a separate terminal.
+
+**Prerequisites**
+
+- `.env.local` has the 5 Stripe vars: `STRIPE_SECRET_KEY` (`sk_test_…`),
+  `STRIPE_PUBLISHABLE_KEY` (`pk_test_…`), `STRIPE_PRICE_PRO`,
+  `STRIPE_PRICE_TEAM` (from `stripe prices create`), and
+  `STRIPE_WEBHOOK_SECRET` (the `whsec_…` printed by `stripe listen`, which
+  changes every session — update it and restart `pnpm dev`).
+- Local stack up (`supabase start`), dev server in full-local mode.
+- In a separate terminal:
+  `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
+
+**Walk (fix every failure before tagging `clase-8`)**
+
+| # | Step | Expected | Automated backing |
+|---|------|----------|-------------------|
+| 1 | Free user opens `/upgrade`, clicks "Subscribirme a Pro" | redirect to Stripe Checkout | manual (browser) |
+| 2 | Pay with `4242 4242 4242 4242`, CVC `123`, future expiry | payment completes | manual (browser) |
+| 3 | `stripe listen` receives `checkout.session.completed` | endpoint returns `200 OK` | — |
+| 4 | `subscriptions` table | row with `plan='pro'`, `status='active'`, future `current_period_end` | `db/__tests__/stripe-webhook.test.ts` (checkout case) |
+| 5 | Back in the app, adapt a template (Pro feature) | works, NO redirect to `/upgrade` | `lib/auth/__tests__/require-plan.test.ts` (Pro resolves) |
+| 6 | `stripe trigger customer.subscription.deleted` | `plan='free'`, `status='cancelled'` | webhook test (deleted case) |
+| 7 | Try to adapt a template again | redirects to `/upgrade` | require-plan test (Free → 403) |
+| 8 | `stripe events resend evt_xxx` twice | 2nd returns `Already processed`, no duplicate rows | webhook tests (idempotency + atomicity) |
+
+Steps 4/6/8 are covered by the webhook integration suite (signature,
+idempotency, atomic rollback) and 5/7 by the plan-gate suite; 1/2/3 are
+inherently manual (real browser + hosted Checkout + your `stripe listen`).
+
+**Known follow-ups carried out of F8** (decide before/at phase close):
+
+- **Stripe key**: prefer a restricted key (`rk_`) with `subscriptions:read`
+  for the webhook/checkout client over the `sk_` secret key.
+- **`trialing`/`past_due`**: the gate honors only `status='active'`. No
+  trial is configured today, so no live exposure; if trials are enabled,
+  trial users would be false-denied — set the policy first.
+- **RLS reality on the Drizzle path**: the Drizzle `@/db` client connects as
+  the Postgres superuser (`DATABASE_URL`), which BYPASSES RLS — so Server
+  Actions are protected by their explicit `eq(workspace_id)` filters +
+  server-resolved `workspaceId`, NOT by SQL-layer RLS (which only guards the
+  supabase-js/PostgREST path). Either correct the code comments that claim
+  otherwise, or add `FORCE ROW LEVEL SECURITY` + per-request JWT context if
+  SQL-layer defense-in-depth is intended.
