@@ -5,85 +5,246 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* =========================================================================
+   Tendr design tokens · destilado de tendr-landing/app/globals.css (DS v2,
+   dirección clean/warm ink-led). La fuente de verdad del sistema visual es el
+   CSS YA IMPLEMENTADO de la landing, NO design-md-v2.md (que deja el acento
+   como TODO). Acento de acción = TINTA #101010; firma = magenta-wine #b23a86;
+   Folk Twins cobalt (IA) + teal (progreso) como apoyo.
+
+   Estrategia: la capa semántica de shadcn se re-apunta a tinta+papel, así que
+   todos los componentes shadcn se re-tematizan solos. Los tokens de marca de
+   Tendr se exponen además como utilidades propias (bg-surface, text-support…).
+   Page theme lock = light (sin dark mode en v2.0; el bloque .dark queda dormido).
+   ========================================================================= */
+
 @theme inline {
+  /* ---- shadcn semantic layer (recoloreada a tinta + papel) ---- */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* ---- Tendr brand tokens (DS §2.1, v2 ink-led) ---- */
+  /* surfaces */
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  /* warm ink text */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  /* ink action accent (= acción). NO hover/active tokens: usar CSS :hover/:active */
+  --color-accent-primary: var(--accent-primary);
+  --color-accent-fg: var(--accent-fg);
+  /* support magenta-wine (= firma / hand-drawn). SOLO anotaciones + checks. */
+  --color-support: var(--support);
+  --color-support-fg: var(--support-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-handdrawn: var(--handdrawn);
+  /* Folk Twins: familia de apoyo con rotación de rol.
+     cobalt = "lo máquina" (IA/automatización); teal = "progreso". */
+  --color-support-cobalt: var(--support-cobalt);
+  --color-support-cobalt-fg: var(--support-cobalt-fg);
+  --color-support-cobalt-soft: var(--support-cobalt-soft);
+  --color-support-teal: var(--support-teal);
+  --color-support-teal-fg: var(--support-teal-fg);
+  --color-support-teal-soft: var(--support-teal-soft);
+  /* highlight (sólo text-bg, p.ej. pill "Recomendado") */
+  --color-highlight: var(--highlight);
+  --color-highlight-fg: var(--highlight-fg);
+  /* functional states (= estado) */
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  /* borders / focus */
+  --color-border-hairline: var(--border-hairline);
+  --color-border-strong: var(--border-strong);
+  --color-border-interactive: var(--border-interactive);
+  --color-focus: var(--focus);
+
+  /* ---- Type families (DS §2.2, v2) ----
+     Registradas con next/font en app/layout.tsx: Bricolage Grotesque (display)
+     + Plus Jakarta Sans (body) + Geist Mono (numerales/meta). Se CONSERVA el
+     nombre --font-sans (no --font-body) para no tocar @layer base / utilidades;
+     sólo se re-apunta su valor (antes Figtree). Inter PROHIBIDO. */
+  --font-display: var(--font-bricolage), "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  --font-heading: var(--font-display);
+
+  /* ---- Type scale (DS §2.3, v2) · base 16px ---- */
+  --text-display-xl: clamp(4rem, 5vw + 1rem, 4.5rem);
+  --text-display-xl--line-height: 1.05;
+  --text-display-xl--letter-spacing: -0.02em;
+  --text-display-lg: clamp(3rem, 4vw, 3.5rem);
+  --text-display-lg--line-height: 1.08;
+  --text-display-lg--letter-spacing: -0.02em;
+  --text-h1: 2.375rem;
+  --text-h1--line-height: 1.1;
+  --text-h1--letter-spacing: -0.02em;
+  --text-h2: 1.875rem;
+  --text-h2--line-height: 1.15;
+  --text-h2--letter-spacing: -0.015em;
+  --text-h3: 1.375rem;
+  --text-h3--line-height: 1.2;
+  --text-h3--letter-spacing: -0.01em;
+  --text-body-lg: 1.25rem;
+  --text-body-lg--line-height: 1.55;
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.6;
+  --text-body-sm: 0.9375rem;
+  --text-body-sm--line-height: 1.5;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.4;
+  --text-caption--letter-spacing: 0.01em;
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.3;
+  --text-meta--letter-spacing: 0.14em;
+
+  /* ---- Radii (DS §2.5 · v2 "suave-medio") · UN solo sistema de esquinas.
+     Las primitivas maia que aún piden rounded-2xl/3xl/4xl quedan CAPADAS a 20px
+     (xl) para no producir pills; los fixes de la Slice B las re-etiquetan a
+     sm/md/lg/xl semánticos. ---- */
+  --radius-sm: 0.5rem;   /* 8px  · inputs, badges, avatares, pequeños */
+  --radius-md: 0.75rem;  /* 12px · botones, CTAs, toggles, controles */
+  --radius-lg: 1rem;     /* 16px · cards, diálogos, paneles */
+  --radius-xl: 1.25rem;  /* 20px · superficies grandes */
+  --radius-2xl: 1.25rem; /* cap 20px (maia legacy) */
+  --radius-3xl: 1.25rem; /* cap 20px (maia legacy) */
+  --radius-4xl: 1.25rem; /* cap 20px (maia legacy) */
+
+  /* ---- Shadows (DS §2.6, v2) · base plana + hairline; sombra sólo en
+     elevación real (popovers/hover). ---- */
+  --shadow-flat: none;
+  --shadow-soft: 0 1px 2px rgba(31, 27, 22, 0.06), 0 2px 8px rgba(31, 27, 22, 0.09);
+  --shadow-note: 0 6px 18px rgba(31, 27, 22, 0.1);
+
+  /* ---- Movimiento (DS §2.7, v2) ---- */
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-emphasis: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --easing-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-snap: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 150ms;
+  --duration-slow: 400ms;
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.75rem; /* v2 "suave-medio": 12px base = --radius-md (controles) */
+
+  /* ---- Surfaces warm-white (DS §2.1) ---- */
+  --surface: #fefefc;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f7f6f2;
+
+  /* ---- Warm ink text (tertiary = #736b5e, 5.21:1 sobre surface — AA) ---- */
+  --text-primary: #1f1b16;
+  --text-secondary: #5a5247;
+  --text-tertiary: #736b5e;
+
+  /* ---- Ink action accent (= acción). 19:1 white-on-ink. Hover/active vía CSS. ---- */
+  --accent-primary: #101010;
+  --accent-fg: #ffffff;
+
+  /* ---- Support magenta-wine (= firma / hand-drawn). support-fg para texto. ---- */
+  --support: #b23a86;
+  --support-fg: #b23a86;
+  --accent-soft: color-mix(in oklab, var(--support) 12%, var(--surface-raised));
+  --handdrawn: var(--support);
+
+  /* ---- Folk Twins: familia de apoyo ----
+     cobalt = "lo máquina" (IA/automatización); teal = "progreso".
+     REGLA DURA: teal NUNCA carga semántica success/OK (success green #356e48
+     sigue siendo el único verde de estado). */
+  --support-cobalt: #2456a8;
+  --support-cobalt-fg: #1f4c94;
+  --support-cobalt-soft: color-mix(in oklab, var(--support-cobalt) 12%, var(--surface-raised));
+  --support-teal: #1b7163;
+  --support-teal-fg: #15604f;
+  --support-teal-soft: color-mix(in oklab, var(--support-teal) 12%, var(--surface-raised));
+
+  /* ---- Highlight (sólo text-bg, p.ej. pill "Recomendado") ---- */
+  --highlight: #fff8bb;
+  --highlight-fg: #7a6a10;
+
+  /* ---- Functional states (ocre cálido, no amber-wash) ---- */
+  --success: #356e48;
+  --success-soft: color-mix(in oklab, var(--success) 12%, var(--surface-raised));
+  --danger: #b3402e;
+  --warning: #b5832e;
+
+  /* ---- Borders / focus ---- */
+  --border-hairline: #eeece6;   /* decorativo */
+  --border-strong: #dedbd2;     /* estructural */
+  --border-interactive: #87837b; /* límites interactivos (>=3:1) */
+  --focus: var(--accent-primary);
+
+  /* ---- shadcn semantic layer → re-apuntada a tinta + papel ---- */
+  --background: var(--surface);
+  --foreground: var(--text-primary);
+  --card: var(--surface-raised);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent-primary);          /* neutral -> ink */
+  --primary-foreground: var(--accent-fg);    /* -> white */
+  --secondary: var(--surface-sunken);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface-sunken);
+  --muted-foreground: var(--text-tertiary);
+  --accent: var(--accent-soft);              /* hover/highlight bg de shadcn (support-soft) */
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--danger);
+  --border: var(--border-hairline);
+  --input: var(--border-hairline);
+  --ring: var(--accent-primary);             /* focus ring = ink */
+  --chart-1: var(--accent-primary);          /* ink */
+  --chart-2: var(--support);                 /* support */
+  --chart-3: var(--success);
+  --chart-4: var(--text-secondary);
+  --chart-5: var(--text-tertiary);
+  --sidebar: var(--surface-raised);
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--accent-primary);
+  --sidebar-primary-foreground: var(--accent-fg);
+  --sidebar-accent: var(--accent-soft);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border-hairline);
+  --sidebar-ring: var(--accent-primary);
 }
 
+/* Page theme lock = light en v2.0 (DS §2.1). El bloque .dark queda DORMIDO
+   (ninguna clase .dark se togglea en el DOM). Se conserva el set neutral
+   heredado por si en el futuro se pide modo nocturno (sería un "papel sepia",
+   no este gris frío). */
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
@@ -118,6 +279,15 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Focus ring offset pattern (SC 2.4.13): 2px surface-raised + 4px accent-primary.
+   Utilidad compartida; aplicar con focus-visible. */
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-surface-raised),
+    0 0 0 4px var(--color-accent-primary);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -126,6 +296,6 @@
     @apply bg-background text-foreground;
   }
   html {
-    @apply font-sans;
+    @apply font-sans; /* body = Plus Jakarta Sans (v2) */
   }
 }

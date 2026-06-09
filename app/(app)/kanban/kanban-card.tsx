@@ -52,7 +52,7 @@ export function KanbanCard({ kanbanCase }: { kanbanCase: KanbanCase }) {
         "shadow-xs outline-none transition-[box-shadow,transform] duration-150 ease-[cubic-bezier(.23,1,.32,1)]",
         "hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-ring",
         "active:scale-[0.98] active:cursor-grabbing",
-        "data-[dragging]:scale-[1.02] data-[dragging]:cursor-grabbing data-[dragging]:shadow-lg data-[dragging]:opacity-90",
+        "data-[dragging]:scale-[1.02] data-[dragging]:cursor-grabbing data-[dragging]:shadow-soft data-[dragging]:opacity-90",
         "motion-reduce:transition-none motion-reduce:active:scale-100 motion-reduce:data-[dragging]:scale-100",
       ].join(" ")}
     >

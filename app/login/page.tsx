@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
 import { sendMagicLink, type SendMagicLinkState } from "./actions";
 
 const initialState: SendMagicLinkState = { status: "idle" };
@@ -33,7 +37,7 @@ export default function LoginPage() {
         <h1 className="text-2xl font-semibold tracking-tight">
           Cuenta vinculada
         </h1>
-        <p className="text-zinc-600 dark:text-zinc-400">
+        <p className="text-muted-foreground">
           Asociamos tu correo a esta sesión. Ya puedes seguir usando tu cuenta
           con normalidad.
         </p>
@@ -45,7 +49,7 @@ export default function LoginPage() {
     return (
       <main className="mx-auto flex min-h-full w-full max-w-sm flex-col justify-center gap-4 px-6 py-16">
         <h1 className="text-2xl font-semibold tracking-tight">Revisa tu correo</h1>
-        <p className="text-zinc-600 dark:text-zinc-400">
+        <p className="text-muted-foreground">
           Si la dirección es válida, te enviamos un enlace para acceder. Abre el
           correo desde este mismo dispositivo para completar el ingreso.
         </p>
@@ -57,17 +61,15 @@ export default function LoginPage() {
     <main className="mx-auto flex min-h-full w-full max-w-sm flex-col justify-center gap-6 px-6 py-16">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold tracking-tight">Accede a Tendr</h1>
-        <p className="text-zinc-600 dark:text-zinc-400">
+        <p className="text-muted-foreground">
           Te enviamos un enlace de acceso a tu correo. No necesitas contraseña.
         </p>
       </div>
 
       <form action={formAction} className="flex flex-col gap-4" noValidate>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="email" className="text-sm font-medium">
-            Correo electrónico
-          </label>
-          <input
+          <Label htmlFor="email">Correo electrónico</Label>
+          <Input
             id="email"
             name="email"
             type="email"
@@ -75,22 +77,17 @@ export default function LoginPage() {
             required
             aria-invalid={state.status === "error"}
             aria-describedby={state.status === "error" ? "email-error" : undefined}
-            className="rounded-md border border-zinc-300 px-3 py-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:focus-visible:ring-zinc-100"
           />
           {state.status === "error" ? (
-            <p id="email-error" role="alert" className="text-sm text-red-600 dark:text-red-400">
+            <p id="email-error" role="alert" className="text-sm text-destructive">
               {state.message}
             </p>
           ) : null}
         </div>
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-md bg-zinc-900 px-3 py-2 text-base font-medium text-zinc-50 transition-colors hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
+        <Button type="submit" disabled={pending}>
           {pending ? "Enviando…" : "Enviar enlace de acceso"}
-        </button>
+        </Button>
       </form>
     </main>
   );
