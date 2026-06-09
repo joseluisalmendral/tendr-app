@@ -184,7 +184,7 @@ export default async function ClientDetailPage({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="font-heading text-2xl font-semibold tracking-tight">
               {client.name}
             </h1>
             {client.company ? (

@@ -22,6 +22,7 @@ import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -245,7 +246,10 @@ export function AdaptDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Adaptar “{template.name}”</DialogTitle>
+          <div className="flex items-center gap-2">
+            <DialogTitle>Adaptar “{template.name}”</DialogTitle>
+            <Badge variant="cobalt">IA</Badge>
+          </div>
           <DialogDescription>
             Elige un cliente y genera una versión personalizada de la plantilla.
           </DialogDescription>

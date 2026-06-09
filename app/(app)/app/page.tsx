@@ -59,7 +59,7 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Inicio</h1>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">Inicio</h1>
         <p className="text-sm text-muted-foreground">
           Un vistazo a tus clientes y casos.
         </p>

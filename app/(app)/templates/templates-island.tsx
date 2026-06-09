@@ -125,6 +125,7 @@ export function TemplatesIsland({
                             <SparkleIcon
                               weight="fill"
                               data-icon="inline-start"
+                              className="text-support-cobalt-fg"
                             />
                             Adaptar
                           </Button>

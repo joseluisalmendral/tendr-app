@@ -264,11 +264,11 @@ function KanbanColumn({
       ref={setNodeRef}
       aria-label={`Columna ${STATUS_LABELS[status]}`}
       data-over={isOver ? "" : undefined}
-      className="flex min-h-48 flex-col gap-3 rounded-lg border bg-muted/30 p-3 transition-colors duration-150 data-[over]:border-foreground/30 data-[over]:bg-muted/60"
+      className="flex min-h-48 flex-col gap-3 rounded-lg border bg-muted/30 p-3 transition-colors duration-150 data-[over]:border-support-teal data-[over]:bg-support-teal-soft"
     >
       <header className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium">{STATUS_LABELS[status]}</h2>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+        <span className="rounded-full bg-support-teal-soft px-2 py-0.5 text-xs tabular-nums text-support-teal-fg">
           {cases.length}
         </span>
       </header>

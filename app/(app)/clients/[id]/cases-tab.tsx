@@ -56,12 +56,12 @@ const STATUS_LABELS: Record<CaseStatus, string> = {
 
 const STATUS_VARIANT: Record<
   CaseStatus,
-  "default" | "secondary" | "outline" | "destructive"
+  "default" | "secondary" | "outline" | "destructive" | "success" | "teal"
 > = {
   prospect: "outline",
   proposal: "secondary",
-  active: "default",
-  closed_won: "default",
+  active: "teal",
+  closed_won: "success",
   closed_lost: "destructive",
 };
 

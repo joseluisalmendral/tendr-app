@@ -147,7 +147,12 @@ export default async function AiSettingsPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-12 p-8">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Configuración de IA</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+            Configuración de IA
+          </h1>
+          <Badge variant="cobalt">IA</Badge>
+        </div>
         <p className="text-muted-foreground">
           Tu key se cifra con AES-256-GCM antes de guardarse. Nunca la mandamos
           a logs ni a Langfuse. Puedes revocarla cuando quieras.
@@ -155,7 +160,7 @@ export default async function AiSettingsPage() {
       </header>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium">Providers</h2>
+        <h2 className="font-heading text-lg font-medium">Providers</h2>
         <div className="flex flex-col gap-3">
           {PROVIDERS.map((p) => {
             const config = configs.find((c) => c.provider === p.id);
@@ -174,7 +179,7 @@ export default async function AiSettingsPage() {
       </section>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-medium">Modelo por feature</h2>
+        <h2 className="font-heading text-lg font-medium">Modelo por feature</h2>
         <div className="divide-y rounded-lg border">
           {FEATURES.map((f) => {
             const mapping = mappings.find((m) => m.feature === f.id);
@@ -195,7 +200,7 @@ export default async function AiSettingsPage() {
 
       <section className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-medium">Uso del mes</h2>
+          <h2 className="font-heading text-lg font-medium">Uso del mes</h2>
           {warning ? (
             <Badge variant="destructive" aria-label="Has superado el 80% del budget mensual">
               80% budget
