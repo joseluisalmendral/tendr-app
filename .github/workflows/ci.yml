@@ -1,0 +1,102 @@
+name: CI
+
+# Pull-request gate. Vercel's GitHub integration creates the PREVIEW deploy
+# automatically on every PR push, so there is intentionally NO preview job here.
+on:
+  pull_request:
+
+# Cancel superseded runs on the same PR to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, typecheck, test, schema, build
+    runs-on: ubuntu-latest
+    # Build-time placeholders. db/index.ts, lib/stripe/client.ts and the crypto
+    # envelope throw at MODULE IMPORT when these are missing, and Next evaluates
+    # those imports during `next build`. These are dummy values — no real
+    # secrets are needed to compile, and nothing connects at build time.
+    env:
+      DATABASE_URL: postgresql://build:build@localhost:5432/build
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
+      STRIPE_SECRET_KEY: sk_test_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_placeholder
+      # 32-byte (64 hex char) dummy KEK so the envelope module loads.
+      AI_KEY_KEK: "0000000000000000000000000000000000000000000000000000000000000000"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Enable Corepack on the runner's pre-installed Node so the pnpm version
+      # pinned in package.json (packageManager) is available, then re-run
+      # setup-node with pnpm caching now that pnpm resolves.
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Schema drift check
+        run: pnpm drizzle-kit check
+
+      - name: Build
+        run: pnpm build
+
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      # Enable Corepack on the runner's pre-installed Node so the pnpm version
+      # pinned in package.json (packageManager) is available, then re-run
+      # setup-node with pnpm caching now that pnpm resolves.
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      # KNOWN PREREQUISITE: specs 01-08 drive the local Supabase stack (Postgres
+      # + GoTrue + Mailpit on 54324) through `pnpm dev`, and they exit early /
+      # time out without it. Booting `supabase start` in CI is not wired in this
+      # change (out of scope: no Supabase CLI step here yet). Until that lands,
+      # this job runs the runner and uploads the report; once a CI Supabase stack
+      # is provisioned (e.g. supabase/setup-cli + `supabase start`), it will pass.
+      # The production smoke spec (e2e/smoke.spec.ts) is EXCLUDED here — it needs
+      # the live PREVIEW_URL and runs in deploy.yml `smoke`, not on PRs.
+      - name: Run Playwright tests
+        run: pnpm exec playwright test --ignore-snapshots e2e/0*.spec.ts
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
