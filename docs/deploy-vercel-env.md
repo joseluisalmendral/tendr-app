@@ -83,7 +83,7 @@ vercel env add STRIPE_PRICE_PRO production
 vercel env add STRIPE_PRICE_TEAM production
 ```
 
-> El webhook destino necesita la URL de producción: si aún no hay deploy, usar `https://tendr-app.vercel.app` (URL por defecto del proyecto) y verificar tras el primer deploy.
+> El webhook destino necesita la URL de producción: si aún no hay deploy, usar `https://tendr-app-red.vercel.app` (URL por defecto del proyecto) y verificar tras el primer deploy.
 
 ## 5. Sentry (3 vars en Vercel + 1 en GitHub)
 
@@ -126,7 +126,7 @@ vercel env add POSTHOG_API_HOST production
 | Variable | Dónde |
 |---|---|
 | `AI_KEY_KEK` | **No se regenera.** Copiar el valor existente de `.env.local` (generado en F6 con `openssl rand`). Si se genera una nueva, las BYO keys cifradas en `ai_provider_configs` quedan irrecuperables |
-| `NEXT_PUBLIC_SITE_URL` | URL de producción: `https://tendr-app.vercel.app` (o el dominio final) |
+| `NEXT_PUBLIC_SITE_URL` | URL de producción: `https://tendr-app-red.vercel.app` (o el dominio final) |
 
 ```bash
 vercel env add AI_KEY_KEK production

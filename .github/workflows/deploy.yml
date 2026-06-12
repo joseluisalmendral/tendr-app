@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: migrate
     env:
-      PREVIEW_URL: https://tendr-app.vercel.app
+      PREVIEW_URL: https://tendr-app-red.vercel.app
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
       SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
