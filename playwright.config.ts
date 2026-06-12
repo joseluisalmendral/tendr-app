@@ -16,10 +16,14 @@ export default defineConfig({
     { name: 'desktop-webkit', use: { ...devices['Desktop Safari'] } },
     { name: 'desktop-firefox', use: { ...devices['Desktop Firefox'] } },
   ],
-  webServer: {
-    command: 'pnpm dev',
-    url: process.env.PREVIEW_URL ?? 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  // When PREVIEW_URL targets a remote deployment there is nothing to boot:
+  // starting a webServer against it makes Playwright fail with "already used".
+  webServer: process.env.PREVIEW_URL
+    ? undefined
+    : {
+        command: 'pnpm dev',
+        url: 'http://localhost:3000',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });
