@@ -25,6 +25,7 @@ allowBuilds:
   '@sentry/cli': false
   esbuild: true
   msw: false
-  protobufjs: set this to true or false
+  # protobufjs: blocked — its postinstall only prints an informational message.
+  protobufjs: false
   sharp: false
   unrs-resolver: false
