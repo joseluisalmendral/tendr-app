@@ -22,6 +22,7 @@ preferFrozenLockfile: true
 # esbuild: allowed — its postinstall validates the platform binary.
 # msw/sharp/unrs-resolver: blocked — prebuilt binaries, scripts unnecessary.
 allowBuilds:
+  '@sentry/cli': false
   esbuild: true
   msw: false
   protobufjs: set this to true or false
